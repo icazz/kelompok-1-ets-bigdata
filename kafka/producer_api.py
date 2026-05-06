@@ -23,7 +23,7 @@ USGS_API_URL = (
     "&maxlongitude=141"
     "&minmagnitude=2"
     "&orderby=time"
-    "&limit=20"
+    "&limit=100"
 )
  
 # ── Logging ───────────────────────────────────────────────────────────────
@@ -193,7 +193,7 @@ def main():
     log.info("=" * 55)
  
     producer = create_producer()
-    tracker = SeenEventTracker(ttl_seconds=3600)
+    tracker = SeenEventTracker(ttl_seconds=30)   # 30 detik — agar setiap cycle kirim semua event terbaru ke Kafka
     cycle = 0
  
     try:

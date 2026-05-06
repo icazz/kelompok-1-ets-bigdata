@@ -1,0 +1,701 @@
+﻿<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GempaRadar — Monitor Seismik Indonesia</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    :root {
+      --bg: #0d1117; --surface: #161b22; --surface2: #1c2330;
+      --border: #30363d; --text: #e6edf3; --text-muted: #8b949e;
+      --red: #f85149; --orange: #e3953d; --yellow: #d29922;
+      --green: #3fb950; --blue: #58a6ff;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    /* Header */
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 22px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 1000; }
+    .logo { display: flex; align-items: center; gap: 10px; }
+    .logo-icon { font-size: 1.5rem; }
+    .logo-text h1 { font-size: 1rem; font-weight: 700; }
+    .logo-text p { font-size: 0.68rem; color: var(--text-muted); }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .live-badge { background: rgba(63,185,80,.15); border: 1px solid var(--green); color: var(--green); font-size: 0.68rem; font-weight: 600; padding: 3px 10px; border-radius: 20px; display: flex; align-items: center; gap: 5px; }
+    .live-dot { width: 6px; height: 6px; background: var(--green); border-radius: 50%; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+    #last-update { font-size: 0.68rem; color: var(--text-muted); }
+    .wib-clock { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+    .wib-time { font-size: 1.1rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; letter-spacing: .03em; }
+    .wib-date { font-size: 0.62rem; color: var(--text-muted); }
+    .wib-label { font-size: 0.55rem; color: var(--green); font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+
+    /* Layout */
+    main { padding: 16px 22px; max-width: 1700px; margin: 0 auto; }
+
+    /* Summary Cards */
+    .summary-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 14px; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+    .stat-card .lbl { font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
+    .stat-card .val { font-size: 1.9rem; font-weight: 700; margin: 3px 0 2px; }
+    .stat-card .sub { font-size: 0.65rem; color: var(--text-muted); }
+    .c-red{color:var(--red)} .c-yel{color:var(--yellow)} .c-grn{color:var(--green)} .c-blu{color:var(--blue)}
+
+    /* Panel Frame */
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 14px; }
+    .panel > .ph { border-radius: 8px 8px 0 0; overflow: hidden; }
+    .ph { padding: 9px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+    .pt { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+    .pb { font-size: 0.6rem; background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted); padding: 2px 7px; border-radius: 20px; }
+    .panel-body { padding: 12px 14px; }
+
+    /* Panel 1 + 2 side-by-side */
+    .panels-top { display: grid; grid-template-columns: 400px 1fr; gap: 14px; align-items: start; margin-bottom: 14px; }
+    .panels-top > .panel { margin-bottom: 0; }
+
+    /* Panel 1: Analytics */
+    .asec { margin-bottom: 14px; }
+    .asec:last-child { margin-bottom: 0; }
+    .asec-title { font-size: 0.65rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
+    .chart-wrap { position: relative; }
+    hr.div { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+
+    /* Wilayah bars */
+    .wlist { display: flex; flex-direction: column; gap: 6px; }
+    .witem { display: flex; align-items: center; gap: 7px; }
+    .wrank { width: 16px; height: 16px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--border); font-size: 0.58rem; color: var(--text-muted); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .wbar-wrap { flex: 1; min-width: 0; }
+    .wname { font-size: 0.68rem; color: var(--text); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .wbar { height: 3px; background: var(--blue); border-radius: 2px; opacity: .7; }
+    .wcnt { font-size: 0.68rem; color: var(--text-muted); flex-shrink: 0; }
+
+    /* Depth cards */
+    .dcards { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; margin-bottom: 8px; }
+    .dcard { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 8px; text-align: center; }
+    .dcard .dv { font-size: 1.4rem; font-weight: 700; }
+    .dcard .dl { font-size: 0.58rem; color: var(--text-muted); }
+
+    /* Panel 2: Gempa Table */
+    .gtbl { width: 100%; border-collapse: collapse; font-size: 0.76rem; }
+    .gtbl th { text-align: left; padding: 7px 8px; color: var(--text-muted); font-weight: 500; border-bottom: 1px solid var(--border); font-size: 0.65rem; text-transform: uppercase; position: sticky; top: 0; background: var(--surface); }
+    .gtbl td { padding: 7px 8px; border-bottom: 1px solid rgba(48,54,61,.4); vertical-align: middle; }
+    .gtbl tr:last-child td { border-bottom: none; }
+    .gtbl tr:hover td { background: var(--surface2); }
+
+    .mbadge { display: inline-block; font-weight: 700; font-size: 0.82rem; min-width: 38px; text-align: center; padding: 2px 5px; border-radius: 4px; }
+    .m-mikro  { background: rgba(139,148,158,.2); color: #8b949e; }
+    .m-minor  { background: rgba(88,166,255,.15); color: var(--blue); }
+    .m-sedang { background: rgba(210,153,34,.2);  color: var(--yellow); }
+    .m-kuat   { background: rgba(248,81,73,.2);   color: var(--red); }
+
+    .dbadge { display: inline-flex; flex-direction: column; align-items: center; font-size: 0.62rem; padding: 2px 6px; border-radius: 3px; line-height: 1.3; }
+    .d-dang { background: rgba(63,185,80,.15); color: var(--green); }
+    .d-men  { background: rgba(210,153,34,.15); color: var(--yellow); }
+    .d-dlm  { background: rgba(248,81,73,.15);  color: var(--red); }
+
+    .abadge { font-size: 0.6rem; padding: 2px 6px; border-radius: 3px; font-weight: 600; }
+    .a-grn { background: rgba(63,185,80,.15);  color: var(--green); }
+    .a-yel { background: rgba(210,153,34,.2);  color: var(--yellow); }
+    .a-org { background: rgba(227,149,61,.2);  color: var(--orange); }
+    .a-red { background: rgba(248,81,73,.2);   color: var(--red); }
+
+    .place-cell { max-width: 240px; }
+    .time-cell  { color: var(--text-muted); white-space: nowrap; font-size: 0.65rem; }
+    .scrl { overflow-y: auto; }
+    .scrl::-webkit-scrollbar { width: 3px; }
+    .scrl::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* Panel 3: Map */
+    .map-tabs { display: flex; gap: 0; padding: 0 14px; border-bottom: 1px solid var(--border); background: var(--surface2); border-radius: 0; overflow-x: auto; }
+    .map-tabs::-webkit-scrollbar { height: 2px; }
+    .map-tab { padding: 10px 16px; font-size: 0.72rem; font-weight: 600; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; transition: color .15s, border-color .15s; user-select: none; }
+    .map-tab:hover { color: var(--text); }
+    .map-tab.active { color: var(--blue); border-bottom-color: var(--blue); }
+    .map-wrap { position: relative; }
+    #map { height: 500px; }
+    .leaflet-container { background: #1a1e24 !important; }
+    /* BMKG-style detail card */
+    .gdetail-card { position: absolute; top: 14px; right: 14px; width: 300px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,.6); z-index: 1000; display: none; overflow: hidden; }
+    .gdetail-card.visible { display: block; }
+    .gdetail-status { display: inline-block; font-size: 0.65rem; font-weight: 600; padding: 3px 10px; border-radius: 20px; margin-bottom: 8px; }
+    .gs-confirmed { background: rgba(63,185,80,.15); color: var(--green); border: 1px solid var(--green); }
+    .gs-felt { background: rgba(227,149,61,.15); color: var(--orange); border: 1px solid var(--orange); }
+    .gs-warning { background: rgba(248,81,73,.15); color: var(--red); border: 1px solid var(--red); }
+    .gdetail-hdr { padding: 14px 14px 0; display: flex; justify-content: space-between; align-items: flex-start; }
+    .gdetail-title { font-size: 0.95rem; font-weight: 700; line-height: 1.3; flex: 1; margin-right: 10px; }
+    .gdetail-close { background: none; border: none; color: var(--text-muted); font-size: 1.1rem; cursor: pointer; padding: 0; line-height: 1; flex-shrink: 0; }
+    .gdetail-close:hover { color: var(--text); }
+    .gdetail-time { padding: 4px 14px 10px; font-size: 0.68rem; color: var(--text-muted); }
+    .gdetail-rows { padding: 0 14px 4px; border-top: 1px solid var(--border); }
+    .gdetail-row { display: flex; align-items: center; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid rgba(48,54,61,.5); font-size: 0.78rem; }
+    .gdetail-row:last-child { border-bottom: none; }
+    .gdetail-row .rl { display: flex; align-items: center; gap: 8px; color: var(--text-muted); }
+    .gdetail-row .rv { font-weight: 600; color: var(--text); }
+    .gdetail-mag-val { font-size: 1.4rem; font-weight: 800; }
+    .gdetail-tsunami-safe   { color: var(--green); }
+    .gdetail-tsunami-warn   { color: var(--red); }
+    .gdetail-btn { display: block; margin: 10px 14px 14px; padding: 10px; text-align: center; background: var(--blue); color: #fff; text-decoration: none; border-radius: 8px; font-size: 0.78rem; font-weight: 600; transition: opacity .15s; }
+    .gdetail-btn:hover { opacity: .85; }
+    .map-legend { background: rgba(22,27,34,.9); border: 1px solid #30363d; border-radius: 8px; padding: 9px 12px; font-size: 11px; color: #e6edf3; }
+    .map-legend h4 { color: #8b949e; text-transform: uppercase; font-size: 0.58rem; letter-spacing: .05em; margin-bottom: 6px; }
+    .lgrow { display: flex; align-items: center; gap: 6px; margin: 3px 0; font-size: 0.68rem; }
+    .lgdot { width: 11px; height: 11px; border-radius: 50%; border: 1px solid rgba(255,255,255,.25); flex-shrink: 0; }
+
+    /* Panel 4: Berita */
+    .ngrid { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; }
+    .nitem { padding: 0; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; transition: border-color .2s, transform .15s; overflow: hidden; display: flex; flex-direction: column; }
+    .nitem:hover { border-color: var(--blue); transform: translateY(-2px); }
+    .nimg  { height: 160px; position: relative; overflow: hidden; flex-shrink: 0; background: #0d1117; }
+    .nimg img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .3s; }
+    .nitem:hover .nimg img { transform: scale(1.04); }
+    .nimg-fallback { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 2.8rem; }
+    .nimg-src  { position: absolute; bottom: 7px; left: 8px; font-size: 0.58rem; color: rgba(255,255,255,.85); background: rgba(0,0,0,.55); padding: 2px 7px; border-radius: 3px; max-width: 80%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; backdrop-filter: blur(4px); }
+    .ncontent  { padding: 10px 12px; flex: 1; display: flex; flex-direction: column; }
+    .ncontent a { color: var(--text); text-decoration: none; font-size: 0.77rem; font-weight: 500; line-height: 1.45; display: block; margin-bottom: 6px; }
+    .ncontent a:hover { color: var(--blue); }
+    .nmeta { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-top: auto; }
+    .nsrc { font-size: 0.6rem; color: var(--text-muted); background: var(--surface); border: 1px solid var(--border); padding: 1px 5px; border-radius: 3px; }
+    .ntime { font-size: 0.6rem; color: var(--text-muted); }
+
+    /* Panel 3: Ripple wave animation untuk gempa terbaru */
+    @keyframes gempa-ripple {
+      0%   { transform: scale(1);   opacity: 0.7; }
+      80%  { transform: scale(3.5); opacity: 0;   }
+      100% { transform: scale(3.5); opacity: 0;   }
+    }
+
+    .loading { color: var(--text-muted); font-size: 0.78rem; text-align: center; padding: 22px; }
+    footer { text-align: center; padding: 14px; color: var(--text-muted); font-size: 0.68rem; border-top: 1px solid var(--border); }
+
+    @media (max-width: 1100px) {
+      .panels-top { grid-template-columns: 1fr; }
+      .summary-row { grid-template-columns: repeat(2,1fr); }
+      .ngrid { grid-template-columns: repeat(2,1fr); }
+    }
+    @media (max-width: 600px) {
+      .ngrid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🌋</div>
+    <div class="logo-text">
+      <h1>GempaRadar</h1>
+      <p>Monitor Aktivitas Seismik Wilayah Indonesia · Kelompok 1</p>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="wib-clock">
+      <div class="wib-label">WIB</div>
+      <div class="wib-time" id="wib-time">--:--:--</div>
+      <div class="wib-date" id="wib-date">--, -- --- ----</div>
+    </div>
+    <div style="width:1px;height:36px;background:var(--border)"></div>
+    <div class="live-badge"><div class="live-dot"></div> LIVE</div>
+    <div id="last-update">Memuat...</div>
+  </div>
+</header>
+
+<main>
+
+  <!-- Summary Cards -->
+  <div class="summary-row">
+    <div class="stat-card"><div class="lbl">Total Gempa</div><div class="val c-blu" id="s-total">—</div><div class="sub">dari USGS API</div></div>
+    <div class="stat-card"><div class="lbl">Magnitudo Tertinggi</div><div class="val c-red" id="s-maxmag">—</div><div class="sub">periode ini</div></div>
+    <div class="stat-card"><div class="lbl">Rata-rata Kedalaman</div><div class="val c-yel" id="s-depth">—</div><div class="sub">km dari permukaan</div></div>
+    <div class="stat-card"><div class="lbl">Wilayah Paling Aktif</div><div class="val" id="s-wilayah" style="font-size:.85rem;margin-top:5px;line-height:1.3">—</div><div class="sub">frekuensi tertinggi</div></div>
+  </div>
+
+  <!-- Row 1: Panel 1 (Analytics) + Panel 2 (Gempa) -->
+  <div class="panels-top">
+
+    <!-- PANEL 1 -->
+    <div class="panel">
+      <div class="ph">
+        <div class="pt">📊 Panel 1 · Dashboard Analitik</div>
+        <span class="pb">Analisis Wajib</span>
+      </div>
+      <div class="panel-body">
+
+        <div class="asec">
+          <div class="asec-title">
+            <span>Distribusi Magnitudo</span>
+            <span class="pb" style="font-size:.55rem">Doughnut Chart · Bonus +3</span>
+          </div>
+          <div class="chart-wrap" style="height:190px"><canvas id="magChart"></canvas></div>
+        </div>
+
+        <hr class="div">
+
+        <div class="asec">
+          <div class="asec-title">
+            <span>Top 10 Wilayah Paling Aktif</span>
+            <span class="pb" style="font-size:.55rem">Analisis Wajib 2</span>
+          </div>
+          <div class="wlist" id="wilayah-list"><div class="loading">Memuat...</div></div>
+        </div>
+
+        <hr class="div">
+
+        <div class="asec">
+          <div class="asec-title">
+            <span>Distribusi Kedalaman</span>
+            <span class="pb" style="font-size:.55rem">Analisis Wajib 3</span>
+          </div>
+          <div class="dcards">
+            <div class="dcard"><div class="dv c-grn" id="d-dang">—</div><div class="dl">Dangkal &lt;70 km</div></div>
+            <div class="dcard"><div class="dv c-yel" id="d-men">—</div><div class="dl">Menengah 70–300</div></div>
+            <div class="dcard"><div class="dv c-red" id="d-dlm">—</div><div class="dl">Dalam &gt;300 km</div></div>
+          </div>
+          <div class="chart-wrap" style="height:150px"><canvas id="depthChart"></canvas></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- PANEL 2 -->
+    <div class="panel">
+      <div class="ph">
+        <div class="pt">🔴 Panel 2 · Gempa Terbaru <span id="gempa-count" class="pb">0 event</span></div>
+        <span style="font-size:.65rem;color:var(--text-muted)">Auto-refresh 30s</span>
+      </div>
+      <div class="scrl" style="max-height:720px">
+        <table class="gtbl">
+          <thead>
+            <tr>
+              <th>Mag</th><th>Lokasi</th><th>Kedalaman</th><th>Alert</th><th>Waktu (WIB)</th>
+            </tr>
+          </thead>
+          <tbody id="gempa-tbody">
+            <tr><td colspan="5" class="loading">Memuat data gempa...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- PANEL 3: Peta -->
+  <div class="panel">
+    <div class="ph">
+      <div class="pt">🗺️ Panel 3 · Peta Lokasi Gempa</div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <span class="pb" id="map-count">0 titik</span>
+        <span style="font-size:.65rem;color:var(--text-muted)">OpenStreetMap · CartoDB Dark</span>
+      </div>
+    </div>
+    <!-- BMKG-style tabs -->
+    <div class="map-tabs">
+      <div class="map-tab active" data-tab="terkini">Terkini</div>
+      <div class="map-tab" data-tab="m5">M 5,0+</div>
+      <div class="map-tab" data-tab="dirasakan">Dirasakan</div>
+      <div class="map-tab" data-tab="tsunami">Berpotensi Tsunami</div>
+    </div>
+    <div class="map-wrap">
+      <div id="map"></div>
+      <!-- BMKG-style detail card -->
+      <div class="gdetail-card" id="gdetail-card">
+        <div class="gdetail-hdr">
+          <div>
+            <div><span class="gdetail-status gs-confirmed" id="gd-status">Terkonfirmasi</span></div>
+            <div class="gdetail-title" id="gd-title">—</div>
+          </div>
+          <button class="gdetail-close" onclick="closeDetailCard()">✕</button>
+        </div>
+        <div class="gdetail-time" id="gd-time">—</div>
+        <div class="gdetail-rows">
+          <div class="gdetail-row">
+            <div class="rl"><span>📈</span><span>Magnitudo</span></div>
+            <div class="rv gdetail-mag-val" id="gd-mag">—</div>
+          </div>
+          <div class="gdetail-row">
+            <div class="rl"><span>🎯</span><span>Kedalaman</span></div>
+            <div class="rv" id="gd-depth">—</div>
+          </div>
+          <div class="gdetail-row">
+            <div class="rl"><span>📍</span><span>Koordinat</span></div>
+            <div class="rv" style="font-size:.72rem" id="gd-coord">—</div>
+          </div>
+          <div class="gdetail-row">
+            <div class="rl"><span>🌊</span><span>Potensi Tsunami</span></div>
+            <div class="rv" id="gd-tsunami">—</div>
+          </div>
+        </div>
+        <a class="gdetail-btn" id="gd-link" href="#" target="_blank" rel="noopener">Lihat Detail USGS →</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- PANEL 4: Berita -->
+  <div class="panel">
+    <div class="ph">
+      <div class="pt">📰 Panel 4 · Berita Gempa Terbaru <span id="berita-count" class="pb">0 artikel</span></div>
+      <span style="font-size:.65rem;color:var(--text-muted)">Google News RSS · Gempa Indonesia</span>
+    </div>
+    <div class="panel-body">
+      <div class="ngrid" id="news-grid"><div class="loading">Memuat berita...</div></div>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  GempaRadar · Kelompok 1 Big Data UTS · Data: USGS FDSN API + Google News RSS · Pipeline: Kafka → HDFS → Spark → Dashboard
+</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  /* ── Charts ── */
+  let magChart = null, depthChart = null;
+
+  /* ── Leaflet Map ── */
+  let leafMap = null, markerLayer = null;
+  let allGempa = [];   // full dataset for tab filtering
+  let activeTab = 'terkini';
+
+  function initMap() {
+    if (leafMap) return;
+    leafMap = L.map('map', { center: [-2, 118], zoom: 4, minZoom: 3, maxZoom: 13 });
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      subdomains: 'abcd', maxZoom: 20
+    }).addTo(leafMap);
+
+    const legend = L.control({ position: 'bottomleft' });
+    legend.onAdd = () => {
+      const d = L.DomUtil.create('div', 'map-legend');
+      d.innerHTML = `<h4>Magnitudo</h4>
+        <div class="lgrow"><div class="lgdot" style="background:#f85149"></div>Kuat (&gt;5.0)</div>
+        <div class="lgrow"><div class="lgdot" style="background:#d29922"></div>Sedang (4–5)</div>
+        <div class="lgrow"><div class="lgdot" style="background:#58a6ff"></div>Minor (3–4)</div>
+        <div class="lgrow"><div class="lgdot" style="background:#8b949e"></div>Mikro (&lt;3)</div>`;
+      return d;
+    };
+    legend.addTo(leafMap);
+    markerLayer = L.layerGroup().addTo(leafMap);
+    setTimeout(() => leafMap.invalidateSize(), 300);
+  }
+  initMap();
+
+  /* ── Tab wiring ── */
+  document.querySelectorAll('.map-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.map-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      activeTab = tab.dataset.tab;
+      closeDetailCard();
+      renderMap(filterByTab(allGempa, activeTab));
+    });
+  });
+
+  function filterByTab(list, tab) {
+    const now = Date.now();
+    switch (tab) {
+      case 'terkini': {
+        // Hanya 1 gempa paling terbaru (seperti BMKG)
+        const sorted = [...list].sort((a,b) => (b.event_time||'').localeCompare(a.event_time||''));
+        return sorted.slice(0, 1);
+      }
+      case 'm5':
+        return list.filter(g => (g.magnitude||0) >= 5.0);
+      case 'dirasakan':
+        return list.filter(g =>
+          (g.felt||0) > 0 ||
+          (g.sig||0) >= 400 ||
+          ((g.magnitude||0) >= 4.5 && (g.depth_km||999) <= 60)
+        );
+      case 'tsunami':
+        return list.filter(g =>
+          g.tsunami === 1 ||
+          ((g.magnitude||0) >= 6.0 && (g.depth_km||999) < 100) ||
+          ((g.magnitude||0) >= 5.5 && (g.depth_km||999) < 50)
+        );
+      default: return list;
+    }
+  }
+
+  /* ── Helpers ── */
+  function magColor(m) { return m>=5?'#f85149':m>=4?'#d29922':m>=3?'#58a6ff':'#8b949e'; }
+  function magR(m)     { return Math.max(5, m * 3.8); }
+  function magCls(m)   { return m<3?'m-mikro':m<4?'m-minor':m<5?'m-sedang':'m-kuat'; }
+  function dCls(d)     { return d<70?'d-dang':d<300?'d-men':'d-dlm'; }
+  function dLbl(d)     { return d<70?'Dangkal':d<300?'Menengah':'Dalam'; }
+  function aCls(a)     { const m={green:'a-grn',yellow:'a-yel',orange:'a-org',red:'a-red'}; return m[a]||'a-grn'; }
+  function fmt(iso) {
+    if (!iso) return '—';
+    try { return new Date(iso).toLocaleString('id-ID',{timeZone:'Asia/Jakarta',hour12:false,day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}); }
+    catch { return iso; }
+  }
+  function fmtWIB(iso) {
+    if (!iso) return '—';
+    try {
+      const d = new Date(iso);
+      return d.toLocaleDateString('id-ID',{timeZone:'Asia/Jakarta',day:'numeric',month:'long',year:'numeric'})
+        + ' • ' + d.toLocaleTimeString('id-ID',{timeZone:'Asia/Jakarta',hour:'2-digit',minute:'2-digit',hour12:false}) + ' WIB';
+    } catch { return iso; }
+  }
+
+  /* ── Detail Card ── */
+  function showDetailCard(g) {
+    const m = g.magnitude || 0;
+    const d = g.depth_km  || 0;
+    // Status label
+    const felt = g.felt||0;
+    // Konsisten dengan filter tsunami: flag USGS, atau M≥6.0 dangkal, atau M≥5.5 sangat dangkal
+    const tsun = g.tsunami === 1 || (m >= 6.0 && d < 100) || (m >= 5.5 && d < 50);
+    let statusCls = 'gs-confirmed', statusTxt = 'Terkonfirmasi';
+    if (felt > 0)  { statusCls = 'gs-felt';    statusTxt = 'Gempa Dirasakan'; }
+    if (tsun)      { statusCls = 'gs-warning';  statusTxt = 'Berpotensi Tsunami'; }
+
+    document.getElementById('gd-status').className = 'gdetail-status ' + statusCls;
+    document.getElementById('gd-status').textContent = statusTxt;
+    document.getElementById('gd-title').textContent  = g.place || '—';
+    document.getElementById('gd-time').textContent   = fmtWIB(g.event_time);
+
+    const magEl = document.getElementById('gd-mag');
+    magEl.textContent  = m.toFixed(1) + ' ' + (g.magnitude_type||'').toUpperCase();
+    magEl.style.color  = magColor(m);
+
+    document.getElementById('gd-depth').textContent  = d.toFixed(1) + ' km (' + dLbl(d) + ')';
+    const lat = (g.latitude||0).toFixed(2);
+    const lon = (g.longitude||0).toFixed(2);
+    const latDir = (g.latitude||0) >= 0 ? 'LU' : 'LS';
+    const lonDir = (g.longitude||0) >= 0 ? 'BT' : 'BB';
+    document.getElementById('gd-coord').textContent  = Math.abs(lat) + ' ' + latDir + '–' + Math.abs(lon) + ' ' + lonDir;
+
+    const tsEl = document.getElementById('gd-tsunami');
+    tsEl.textContent  = tsun ? 'Berpotensi Tsunami' : 'Tidak Berpotensi Tsunami';
+    tsEl.className    = 'rv ' + (tsun ? 'gdetail-tsunami-warn' : 'gdetail-tsunami-safe');
+
+    document.getElementById('gd-link').href = g.url || '#';
+
+    const card = document.getElementById('gdetail-card');
+    card.classList.add('visible');
+  }
+
+  function closeDetailCard() {
+    document.getElementById('gdetail-card').classList.remove('visible');
+  }
+
+  /* ── Render Map ── */
+  function renderMap(list) {
+    if (!markerLayer) return;
+    markerLayer.clearLayers();
+    document.getElementById('map-count').textContent = list.length + ' titik';
+    const now = Date.now();
+    const H24 = 24 * 60 * 60 * 1000;
+
+    list.forEach(g => {
+      if (!g.latitude || !g.longitude) return;
+      const m  = g.magnitude || 0;
+      const cl = magColor(m);
+      const r  = magR(m);
+      const eventMs  = g.event_time ? new Date(g.event_time).getTime() : 0;
+      const isRecent = eventMs > 0 && (now - eventMs) < H24;
+      let marker;
+
+      if (isRecent) {
+        const d = r * 2, total = d * 5, half = d / 2;
+        const rs = `position:absolute;top:50%;left:50%;margin-top:-${half}px;margin-left:-${half}px;width:${d}px;height:${d}px;border-radius:50%;border:2px solid ${cl};pointer-events:none;`;
+        const html = `<div style="position:relative;width:${total}px;height:${total}px;overflow:visible">
+          <div style="${rs}animation:gempa-ripple 2.5s 0s infinite ease-out"></div>
+          <div style="${rs}animation:gempa-ripple 2.5s 0.9s infinite ease-out"></div>
+          <div style="position:absolute;top:50%;left:50%;margin-top:-${half}px;margin-left:-${half}px;width:${d}px;height:${d}px;border-radius:50%;background:${cl};opacity:0.88;border:1.5px solid rgba(255,255,255,.4);cursor:pointer"></div>
+          <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;font-size:${Math.max(8,r*0.9)}px;font-weight:700;pointer-events:none;text-shadow:0 1px 3px rgba(0,0,0,.8)">${m.toFixed(1)}</div>
+        </div>`;
+        marker = L.marker([g.latitude, g.longitude], {
+          icon: L.divIcon({ html, className:'', iconSize:[total,total], iconAnchor:[total/2,total/2] })
+        });
+      } else {
+        const iconHtml = `<div style="width:${r*2}px;height:${r*2}px;border-radius:50%;background:${cl};opacity:0.82;border:1.5px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;cursor:pointer">
+          <span style="color:#fff;font-size:${Math.max(7,r*0.85)}px;font-weight:700;text-shadow:0 1px 3px rgba(0,0,0,.8)">${m.toFixed(1)}</span>
+        </div>`;
+        marker = L.marker([g.latitude, g.longitude], {
+          icon: L.divIcon({ html: iconHtml, className:'', iconSize:[r*2,r*2], iconAnchor:[r,r] })
+        });
+      }
+
+      // Click → show BMKG-style detail card
+      marker.on('click', () => showDetailCard(g));
+      marker._gempaData = g;
+      markerLayer.addLayer(marker);
+    });
+
+    // Tab "Terkini": auto-buka detail card untuk 1 gempa terbaru
+    if (activeTab === 'terkini' && list.length === 1) {
+      setTimeout(() => showDetailCard(list[0]), 200);
+    }
+  }
+
+  /* ── Render Gempa Table ── */
+  function renderGempa(list) {
+    const tb = document.getElementById('gempa-tbody');
+    document.getElementById('gempa-count').textContent = list.length + ' event';
+    if (!list.length) { tb.innerHTML = '<tr><td colspan="5" class="loading">Belum ada data</td></tr>'; return; }
+    tb.innerHTML = list.map(g => {
+      const m  = g.magnitude || 0, d = g.depth_km || 0;
+      const pt = (g.place||'').length > 48 ? g.place.slice(0,48)+'…' : (g.place||'—');
+      return `<tr>
+        <td><span class="mbadge ${magCls(m)}">${m.toFixed(1)}</span></td>
+        <td><div class="place-cell" title="${g.place||''}">${pt}</div></td>
+        <td><span class="dbadge ${dCls(d)}">${dLbl(d)}<small>${d.toFixed(0)} km</small></span></td>
+        <td><span class="abadge ${aCls(g.alert)}">${g.alert?g.alert.toUpperCase():'N/A'}</span></td>
+        <td class="time-cell">${fmt(g.event_time)}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  /* ── Render Wilayah ── */
+  function renderWilayah(list) {
+    const el = document.getElementById('wilayah-list');
+    if (!list||!list.length) { el.innerHTML='<div class="loading">Belum ada data</div>'; return; }
+    const mx = list[0].count || 1;
+    el.innerHTML = list.slice(0,10).map((w,i) => `<div class="witem">
+      <div class="wrank">${i+1}</div>
+      <div class="wbar-wrap">
+        <div class="wname" title="${w.wilayah}">${w.wilayah||'—'}</div>
+        <div class="wbar" style="width:${Math.round(w.count/mx*100)}%"></div>
+      </div>
+      <div class="wcnt">${w.count}×</div>
+    </div>`).join('');
+  }
+
+  /* ── Render Berita (real images) ── */
+  const NEWS_FALLBACK_GRAD = [
+    ['#0d1b2a','#1b4a7a'], ['#1a0808','#5a1515'], ['#0a1a0e','#1a5a28'],
+    ['#1a1400','#5a4000'], ['#150a1a','#3a186a'], ['#0a0e16','#1a3060'],
+    ['#180810','#501828'], ['#080a1a','#1a2060']
+  ];
+  const NEWS_ICONS = ['🌋','⚡','🗺️','📡','🌊','🔔','🌏','📊'];
+
+  function renderBerita(list) {
+    const el = document.getElementById('news-grid');
+    document.getElementById('berita-count').textContent = list.length + ' artikel';
+    if (!list.length) { el.innerHTML='<div class="loading">Belum ada berita</div>'; return; }
+    el.innerHTML = list.map((n, i) => {
+      const [c1, c2] = NEWS_FALLBACK_GRAD[i % NEWS_FALLBACK_GRAD.length];
+      const icon      = NEWS_ICONS[i % NEWS_ICONS.length];
+      const imgUrl    = n.image_url || '';
+      const srcShort  = (n.source||'Google News').replace(/Google News \((.+?)\)/, '$1');
+      const imgBlock  = imgUrl
+        ? `<img src="${imgUrl}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\\'nimg-fallback\\' style=\\'background:linear-gradient(135deg,${c1},${c2})\\'>${icon}</div><div class=\\'nimg-src\\'>${srcShort}</div>'">`
+        : `<div class="nimg-fallback" style="background:linear-gradient(135deg,${c1},${c2})">${icon}</div>`;
+      return `<div class="nitem">
+        <div class="nimg">${imgBlock}<div class="nimg-src">${srcShort}</div></div>
+        <div class="ncontent">
+          <a href="${n.url||'#'}" target="_blank" rel="noopener noreferrer">${n.title||'(tanpa judul)'}</a>
+          <div class="nmeta">
+            <span class="nsrc">${n.source||'Google News'}</span>
+            <span class="ntime">${fmt(n.published_time||n.timestamp)}</span>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  /* ── Charts ── */
+  function renderMagChart(dist) {
+    const ORDER = ['Mikro (<3)', 'Minor (3-4)', 'Sedang (4-5)', 'Kuat (>5)'];
+    const CMAP  = { 'Mikro (<3)':'#8b949e', 'Minor (3-4)':'#58a6ff', 'Sedang (4-5)':'#d29922', 'Kuat (>5)':'#f85149' };
+    const vals   = ORDER.map(k => dist[k] ?? 0);
+    const colors = ORDER.map(k => CMAP[k]);
+    if (magChart) magChart.destroy();
+    magChart = new Chart(document.getElementById('magChart'), {
+      type: 'doughnut',
+      data: { labels: ORDER, datasets:[{ data:vals, backgroundColor:colors, borderColor:'#161b22', borderWidth:2 }] },
+      options: { responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{ position:'right', labels:{ color:'#e6edf3', font:{size:10}, padding:9 } },
+          tooltip:{ callbacks:{ label: ctx => ` ${ctx.label}: ${ctx.parsed} gempa` } } }
+      }
+    });
+  }
+  function renderDepthChart(dist) {
+    const labels=Object.keys(dist), vals=Object.values(dist);
+    const colors=['#3fb950','#d29922','#f85149'];
+    if (depthChart) depthChart.destroy();
+    depthChart = new Chart(document.getElementById('depthChart'), {
+      type: 'bar',
+      data: { labels, datasets:[{ label:'Jumlah Gempa', data:vals, backgroundColor:colors, borderRadius:4 }] },
+      options: { responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{ display:false } },
+        scales:{
+          x:{ ticks:{ color:'#8b949e', font:{size:9} }, grid:{ color:'#30363d' } },
+          y:{ ticks:{ color:'#8b949e', font:{size:9} }, grid:{ color:'#30363d' } }
+        }
+      }
+    });
+  }
+
+  /* ── Summary Cards ── */
+  function updateSummary(s) {
+    document.getElementById('s-total').textContent  = s.total_gempa ?? '—';
+    document.getElementById('s-maxmag').textContent = s.max_magnitude!=null ? s.max_magnitude.toFixed(1) : '—';
+    document.getElementById('s-depth').textContent  = s.rata_rata_kedalaman!=null ? s.rata_rata_kedalaman.toFixed(1) : '—';
+    document.getElementById('s-wilayah').textContent= s.wilayah_teraktif || '—';
+  }
+  function updateDepth(dist) {
+    if (!dist) return;
+    document.getElementById('d-dang').textContent = dist['Dangkal (<70 km)']    ?? '—';
+    document.getElementById('d-men').textContent  = dist['Menengah (70-300 km)'] ?? '—';
+    document.getElementById('d-dlm').textContent  = dist['Dalam (>300 km)']      ?? '—';
+  }
+
+  /* ── Main Fetch ── */
+  async function fetchAndRender() {
+    try {
+      const res = await fetch('/api/data');
+      if (!res.ok) throw new Error('HTTP '+res.status);
+      const data = await res.json();
+      document.getElementById('last-update').textContent = 'Update: '+new Date().toLocaleTimeString('id-ID');
+
+      allGempa = data.gempa_all || data.gempa_terbaru || [];
+      const gempa  = data.gempa_terbaru || [];
+      const berita = data.berita_terbaru || [];
+      const spark  = data.spark_results  || {};
+
+      renderGempa(gempa);
+      renderMap(filterByTab(allGempa, activeTab));
+      renderBerita(berita);
+      updateSummary(spark);
+      updateDepth(spark.distribusi_kedalaman);
+      if (spark.distribusi_magnitudo) renderMagChart(spark.distribusi_magnitudo);
+      if (spark.distribusi_kedalaman) renderDepthChart(spark.distribusi_kedalaman);
+      if (spark.top_wilayah)          renderWilayah(spark.top_wilayah);
+    } catch(err) {
+      document.getElementById('last-update').textContent = '⚠ Gagal: '+err.message;
+    }
+  }
+
+  // ── WIB Realtime Clock ──
+  const WIB_DAYS = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+  const WIB_MONTHS = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agt','Sep','Okt','Nov','Des'];
+  function tickWIBClock() {
+    const now = new Date();
+    // WIB = UTC+7
+    const wib = new Date(now.getTime() + (7 * 60 * 60 * 1000));
+    const hh = String(wib.getUTCHours()).padStart(2,'0');
+    const mm = String(wib.getUTCMinutes()).padStart(2,'0');
+    const ss = String(wib.getUTCSeconds()).padStart(2,'0');
+    document.getElementById('wib-time').textContent = hh + ':' + mm + ':' + ss;
+    const dayName  = WIB_DAYS[wib.getUTCDay()];
+    const dateNum  = wib.getUTCDate();
+    const monthName= WIB_MONTHS[wib.getUTCMonth()];
+    const year     = wib.getUTCFullYear();
+    document.getElementById('wib-date').textContent = dayName + ', ' + dateNum + ' ' + monthName + ' ' + year;
+  }
+  tickWIBClock();
+  setInterval(tickWIBClock, 1000);
+
+  fetchAndRender();
+  setInterval(fetchAndRender, 30000);
+</script>
+
+
+</body>
+</html>
+
