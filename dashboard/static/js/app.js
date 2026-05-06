@@ -33,18 +33,11 @@ themeToggle.addEventListener('click', () => {
   
   // Update Charts if they exist
   if (magChart) {
-    magChart.options.scales.x.grid.color = isLight ? '#e4e4e7' : '#262626';
-    magChart.options.scales.y.grid.color = isLight ? '#e4e4e7' : '#262626';
-    magChart.options.scales.x.ticks.color = isLight ? '#71717a' : '#a1a1aa';
-    magChart.options.scales.y.ticks.color = isLight ? '#71717a' : '#a1a1aa';
+    // magChart is always in the dark hero — keep dark palette
     magChart.update('none');
   }
-  if (depthChart) {
-    depthChart.options.scales.x.grid.color = isLight ? '#e4e4e7' : '#262626';
-    depthChart.options.scales.y.grid.color = isLight ? '#e4e4e7' : '#262626';
-    depthChart.options.scales.x.ticks.color = isLight ? '#71717a' : '#a1a1aa';
-    depthChart.options.scales.y.ticks.color = isLight ? '#71717a' : '#a1a1aa';
-    depthChart.update('none');
+  if (depthDoughnutChart) {
+    depthDoughnutChart.update('none');
   }
   // Force redraw some elements
   lucide.createIcons();
@@ -79,8 +72,20 @@ function tickClock() {
 }
 tickClock(); setInterval(tickClock, 1000);
 
+// ── Time formatting ──
+function timeAgo(isoStr) {
+  if (!isoStr) return 'Baru saja';
+  try {
+    const diff = Math.floor((Date.now() - new Date(isoStr).getTime()) / 1000);
+    if (diff < 60) return diff + ' detik lalu';
+    if (diff < 3600) return Math.floor(diff / 60) + ' menit lalu';
+    if (diff < 86400) return Math.floor(diff / 3600) + ' jam lalu';
+    return Math.floor(diff / 86400) + ' hari lalu';
+  } catch(e) { return 'Baru saja'; }
+}
+
 // ── Charts ──
-let magChart = null, depthChart = null;
+let magChart = null, depthChart = null, depthDoughnutChart = null;
 
 // ── Leaflet & Mapbox Maps ──
 let leafMap = null, markerLayer = null;
@@ -111,8 +116,9 @@ function initMap(id) {
   const map = L.map(id, { center: [-2, 118], zoom: 5, minZoom: 3, maxZoom: 13, zoomControl: false });
   L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-  const baseLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; OSM &copy; CARTO', subdomains: 'abcd', maxZoom: 20
+  // Street — OpenStreetMap standard (default, always visible like USGS)
+  const baseStreet = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', maxZoom: 19
   });
   const baseDark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
     attribution: '&copy; OSM &copy; CARTO', subdomains: 'abcd', maxZoom: 20
@@ -129,8 +135,9 @@ function initMap(id) {
     })
   ]);
 
-  (isLight ? baseLight : baseDark).addTo(map);
-  L.control.layers({ "Standard": isLight ? baseLight : baseDark, "Satelit": baseSat }, null, { position: 'topright' }).addTo(map);
+  // Default: Street in light, Dark in dark mode
+  (isLight ? baseStreet : baseDark).addTo(map);
+  L.control.layers({ "Street": baseStreet, "Gelap": baseDark, "Satelit": baseSat }, null, { position: 'topright' }).addTo(map);
 
   const legend = L.control({ position: 'bottomleft' });
   legend.onAdd = () => {
@@ -166,17 +173,21 @@ function initGlobeMap() {
       container: 'map-globe',
       style: 'mapbox://styles/mapbox/standard',
       center: [118, -2],
-      zoom: 3,
+      zoom: 1.8,
       projection: 'globe'
     });
     
     mapGlobe.on('style.load', () => {
+      // Style config — separated so errors don't block marker rendering
       try {
         mapGlobe.setConfigProperty('basemap', 'lightPreset', isLight ? 'day' : 'night');
         mapGlobe.setConfigProperty('basemap', 'showPointOfInterestLabels', false);
         mapGlobe.setConfigProperty('basemap', 'showTransitLabels', false);
-        if (allGempa.length > 0) renderMapboxMarkers(mapGlobe, allGempa, 'globe-count');
-      } catch(e) { console.warn('Globe style.load error:', e); }
+      } catch(e) { console.warn('Globe style config error:', e); }
+      // Render markers (allGempa may already be populated by fetchAndRender)
+      if (allGempa.length > 0) {
+        try { renderMapboxMarkers(mapGlobe, allGempa, 'globe-count'); } catch(e) { console.warn('Globe markers error:', e); }
+      }
     });
   } catch(e) {
     console.warn('initGlobeMap error:', e);
@@ -356,17 +367,101 @@ function renderMap(list, layer, map) {
       layer.addLayer(marker);
     }
   });
+  // Also refresh the sidebar
+  renderMapSidebar(list);
 }
+
+// ── Map Sidebar (USGS-style left list) ──
+let activeSidebarId = null;
+let sidebarSortMode = 'time';
+
+function fmtShort(iso) {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleString('id-ID', {
+      timeZone: 'Asia/Jakarta', day: '2-digit', month: 'short',
+      hour: '2-digit', minute: '2-digit', hour12: false
+    });
+  } catch { return iso; }
+}
+
+function renderMapSidebar(list) {
+  const el = document.getElementById('msb-list');
+  const countEl = document.getElementById('msb-count');
+  if (!el) return;
+
+  let sorted = [...list];
+  if (sidebarSortMode === 'mag') {
+    sorted.sort((a, b) => (b.magnitude || 0) - (a.magnitude || 0));
+  } else {
+    sorted.sort((a, b) => (b.event_time || '').localeCompare(a.event_time || ''));
+  }
+
+  if (countEl) countEl.textContent = sorted.length + ' gempa';
+
+  if (!sorted.length) {
+    el.innerHTML = '<div style="padding:24px 16px;text-align:center;color:var(--text-muted);font-size:0.8rem">Tidak ada data</div>';
+    return;
+  }
+
+  el.innerHTML = sorted.map(g => {
+    const m = g.magnitude || 0;
+    const depth = g.depth_km || 0;
+    const id = g.id || (g.place + g.event_time);
+    const isActive = id === activeSidebarId;
+    const tsun = g.tsunami === 1 || (m >= 6.0 && depth < 100);
+    const safeG = JSON.stringify(g).replace(/"/g, '&quot;');
+    return `<div class="msb-item${isActive ? ' active' : ''}" data-msb-id="${id}"
+      onclick="sidebarSelect(${safeG}, '${id}')">
+      <div class="msb-mag" style="background:${magColor(m)}">${m.toFixed(1)}</div>
+      <div class="msb-info">
+        <div class="msb-place">${g.place || '—'}</div>
+        <div class="msb-meta">
+          <span>${fmtShort(g.event_time)}</span>
+          <span class="msb-badge">${depth.toFixed(0)} km · ${dLbl(depth)}</span>
+          ${tsun ? '<span class="msb-badge msb-badge-warn">Tsunami</span>' : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function sidebarSelect(g, id) {
+  activeSidebarId = id;
+  document.querySelectorAll('.msb-item').forEach(el => el.classList.remove('active'));
+  const target = document.querySelector(`.msb-item[data-msb-id="${id}"]`);
+  if (target) {
+    target.classList.add('active');
+    target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+  if (leafMap && g.latitude && g.longitude) {
+    leafMap.setView([g.latitude, g.longitude], 8, { animate: true });
+  }
+  showDetailCard(g, 'map');
+}
+
+// Sort handler
+document.getElementById('msb-sort')?.addEventListener('change', e => {
+  sidebarSortMode = e.target.value;
+  renderMapSidebar(filterByTab(allGempa, activeTab));
+});
 
 // ── Render Mapbox (Globe & 3D) ──
 function renderMapboxMarkers(mapInstance, list, countId) {
-  if (!mapInstance || !mapInstance.isStyleLoaded()) return;
+  if (!mapInstance) return;
+  if (!mapInstance.isStyleLoaded()) {
+    // Style not yet ready — queue this render for when it finishes loading
+    mapInstance.once('style.load', () => renderMapboxMarkers(mapInstance, list, countId));
+    return;
+  }
   const countEl = document.getElementById(countId);
   if (countEl) countEl.textContent = list.length + ' titik';
   
   // Remove existing markers specific to this map
   const existingMarkers = mapInstance.getContainer().querySelectorAll('.mapbox-marker');
   existingMarkers.forEach(el => el.remove());
+
+  const isGlobe = mapInstance.getContainer().id === 'map-globe';
 
   list.forEach(g => {
     if (!g.latitude || !g.longitude) return;
@@ -390,7 +485,7 @@ function renderMapboxMarkers(mapInstance, list, countId) {
     // Fly to location on click
     el.addEventListener('click', (e) => {
       e.stopPropagation();
-      const z = mapInstance.getContainer().id === 'map3d' ? 16 : 8;
+      const z = mapInstance.getContainer().id === 'map3d' ? 16 : (isGlobe ? 6 : 8);
       mapInstance.flyTo({
         center: [g.longitude, g.latitude],
         zoom: z,
@@ -398,15 +493,64 @@ function renderMapboxMarkers(mapInstance, list, countId) {
         curve: 1.4,
         essential: true
       });
+      if (isGlobe) showGlobeDetailCard(g);
     });
 
-    // Add marker to map
-    new mapboxgl.Marker(el)
-      .setLngLat([g.longitude, g.latitude])
-      .setPopup(new mapboxgl.Popup({ offset: 25 })
-      .setHTML(`<strong>${g.place||'—'}</strong><br/>Mag: ${m.toFixed(1)}<br/>Kedalaman: ${g.depth_km} km`))
-      .addTo(mapInstance);
+    // Add marker to map (with popup only for non-globe)
+    const markerObj = new mapboxgl.Marker(el).setLngLat([g.longitude, g.latitude]);
+    if (!isGlobe) {
+      markerObj.setPopup(new mapboxgl.Popup({ offset: 25 })
+        .setHTML(`<strong>${g.place||'—'}</strong><br/>Mag: ${m.toFixed(1)}<br/>Kedalaman: ${g.depth_km} km`));
+    }
+    markerObj.addTo(mapInstance);
   });
+}
+
+// ── Globe Detail Card ──
+function showGlobeDetailCard(g) {
+  const card = document.getElementById('globe-detail-card');
+  if (!card) return;
+  const m = g.magnitude || 0;
+  const depth = g.depth_km ?? '—';
+  const dc = g.depth_category || (depth < 70 ? 'Dangkal' : depth < 300 ? 'Menengah' : 'Dalam');
+  const hasTsunami = g.tsunami === 1 || (m >= 6 && depth < 100);
+
+  // Status badge
+  const statusEl = document.getElementById('gdc-status');
+  if (statusEl) {
+    if (hasTsunami) { statusEl.className = 'gdetail-status gs-warning'; statusEl.textContent = 'POTENSI TSUNAMI'; }
+    else if (g.felt > 0 || g.sig >= 400) { statusEl.className = 'gdetail-status gs-felt'; statusEl.textContent = 'Dirasakan'; }
+    else { statusEl.className = 'gdetail-status gs-confirmed'; statusEl.textContent = 'Terkonfirmasi'; }
+  }
+
+  const setEl = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
+  const setHtml = (id, val) => { const e = document.getElementById(id); if (e) e.innerHTML = val; };
+
+  setEl('gdc-title', g.place || '—');
+  setEl('gdc-time', g.event_time ? fmt(g.event_time) + ' WIB' : '—');
+
+  const magEl = document.getElementById('gdc-mag');
+  if (magEl) {
+    magEl.textContent = m.toFixed(1) + ' ' + (g.magnitude_type || 'M');
+    magEl.style.color = magColor(m);
+  }
+
+  setEl('gdc-depth', depth + ' km — ' + dc);
+  setEl('gdc-coord', (g.latitude != null ? g.latitude.toFixed(4) : '—') + '°, ' + (g.longitude != null ? g.longitude.toFixed(4) : '—') + '°');
+  setHtml('gdc-tsunami', hasTsunami
+    ? '<span style="color:var(--red);font-weight:600">⚠ Berpotensi</span>'
+    : '<span style="color:var(--green)">Tidak berpotensi</span>');
+
+  const linkEl = document.getElementById('gdc-link');
+  if (linkEl) linkEl.href = g.url || '#';
+
+  card.classList.add('visible');
+  lucide.createIcons();
+}
+
+function closeGlobeDetailCard() {
+  const card = document.getElementById('globe-detail-card');
+  if (card) card.classList.remove('visible');
 }
 
 // ── Render Gempa Table with Grouping ──
@@ -500,32 +644,85 @@ function renderBerita(list) {
 }
 
 // ── Charts ──
+function getChartColors() {
+  const isLight = document.body.classList.contains('light-mode');
+  return {
+    gridColor: isLight ? '#e4e4e7' : '#262626',
+    tickColor: isLight ? '#71717a' : '#a1a1aa',
+  };
+}
+
 function renderMagChart(dist) {
+  const canvas = document.getElementById('magChart');
+  if (!canvas || typeof Chart === 'undefined') return;
+  // magChart lives inside the always-dark hero section — hard-code dark palette
+  const gridColor = 'rgba(255,255,255,0.08)';
+  const tickColor = 'rgba(255,255,255,0.35)';
   const ORDER = ['Mikro (<3)','Minor (3-4)','Sedang (4-5)','Kuat (>5)'];
   const CMAP = {'Mikro (<3)':'#94a3b8','Minor (3-4)':'#3b82f6','Sedang (4-5)':'#f97316','Kuat (>5)':'#ef4444'};
   const vals = ORDER.map(k => dist[k]??0), colors = ORDER.map(k => CMAP[k]);
-  if (magChart) magChart.destroy();
-  magChart = new Chart(document.getElementById('magChart'), {
-    type:'bar', data:{labels:ORDER,datasets:[{data:vals,backgroundColor:colors,borderRadius:4,barThickness:14}]},
+  if (magChart) { magChart.destroy(); magChart = null; }
+  magChart = new Chart(canvas, {
+    type:'bar', data:{labels:ORDER,datasets:[{data:vals,backgroundColor:colors,borderRadius:4,barThickness:12}]},
     options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
       plugins:{legend:{display:false}},
       scales:{
-        x:{grid:{color:gridColor},ticks:{color:tickColor}},
-        y:{grid:{display:false},ticks:{color:tickColor,precision:0}}
+        x:{grid:{color:gridColor},ticks:{color:tickColor,font:{size:10}}},
+        y:{grid:{display:false},ticks:{color:tickColor,font:{size:10},precision:0}}
       }
     }
   });
 }
 function renderDepthChart(dist) {
+  const canvas = document.getElementById('depthChart');
+  if (!canvas || typeof Chart === 'undefined') return;
+  const { gridColor, tickColor } = getChartColors();
   const labels=['Dangkal','Menengah','Dalam'];
   const vals=[dist['Dangkal (<70 km)']||0,dist['Menengah (70-300 km)']||0,dist['Dalam (>300 km)']||0];
   if (depthChart) depthChart.destroy();
-  depthChart = new Chart(document.getElementById('depthChart'), {
+  depthChart = new Chart(canvas, {
     type:'bar', data:{labels,datasets:[{data:vals,backgroundColor:['#22c55e','#f97316','#ef4444'],borderRadius:4}]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
       scales:{
         x:{grid:{display:false},ticks:{color:tickColor}},
         y:{grid:{color:gridColor},ticks:{color:tickColor}}
+      }
+    }
+  });
+}
+
+function renderDepthDoughnut(dist) {
+  const canvas = document.getElementById('depthDoughnut');
+  if (!canvas || typeof Chart === 'undefined') return;
+  const vals = [dist['Dangkal (<70 km)']||0, dist['Menengah (70-300 km)']||0, dist['Dalam (>300 km)']||0];
+  const total = vals.reduce((a,b) => a+b, 0);
+  if (depthDoughnutChart) { depthDoughnutChart.destroy(); depthDoughnutChart = null; }
+  depthDoughnutChart = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels: ['Dangkal', 'Menengah', 'Dalam'],
+      datasets: [{
+        data: vals,
+        backgroundColor: ['#22c55e', '#f97316', '#ef4444'],
+        borderColor: 'rgba(3,7,18,0.6)',
+        borderWidth: 2,
+        hoverOffset: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '64%',
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const pct = total > 0 ? ((ctx.parsed / total) * 100).toFixed(1) : 0;
+              return ` ${ctx.label}: ${ctx.parsed} (${pct}%)`;
+            }
+          }
+        }
       }
     }
   });
@@ -537,7 +734,33 @@ function updateSummary(s) {
   document.getElementById('s-maxmag').textContent = s.max_magnitude!=null ? s.max_magnitude.toFixed(1) : '—';
   document.getElementById('s-depth').textContent = s.rata_rata_kedalaman!=null ? s.rata_rata_kedalaman.toFixed(1) : '—';
   document.getElementById('s-wilayah').textContent = s.wilayah_teraktif || '—';
+  // Globe side panel stats
+  const setEl = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
+  setEl('gs-total', s.total_gempa ?? '—');
+  setEl('gs-maxmag', s.max_magnitude!=null ? s.max_magnitude.toFixed(1) : '—');
+  setEl('gs-region', s.wilayah_teraktif || '—');
+  // Compute avg magnitude from distribusi
+  if (s.distribusi_magnitudo) {
+    const dist = s.distribusi_magnitudo;
+    const totalN = (dist['Mikro (<3)']||0)+(dist['Minor (3-4)']||0)+(dist['Sedang (4-5)']||0)+(dist['Kuat (>5)']||0);
+    const avgMag = totalN > 0
+      ? ((dist['Mikro (<3)']||0)*2 + (dist['Minor (3-4)']||0)*3.5 + (dist['Sedang (4-5)']||0)*4.5 + (dist['Kuat (>5)']||0)*5.5) / totalN
+      : null;
+    setEl('gs-avgmag', avgMag != null ? avgMag.toFixed(1) : '—');
+  } else if (s.rata_rata_magnitudo != null) {
+    setEl('gs-avgmag', s.rata_rata_magnitudo.toFixed(1));
+  }
 }
+
+function updateMagDist(dist) {
+  if (!dist) return;
+  const setEl = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
+  setEl('gd-mikro', dist['Mikro (<3)'] ?? '—');
+  setEl('gd-minor', dist['Minor (3-4)'] ?? '—');
+  setEl('gd-sedang', dist['Sedang (4-5)'] ?? '—');
+  setEl('gd-kuat', dist['Kuat (>5)'] ?? '—');
+}
+
 function updateDepth(dist) {
   if (!dist) return;
   document.getElementById('d-dang').textContent = dist['Dangkal (<70 km)'] ?? '—';
@@ -563,8 +786,8 @@ async function fetchAndRender() {
     try { renderBerita(berita); } catch(e) { console.warn('renderBerita error:', e); }
     try { updateSummary(spark); } catch(e) { console.warn('updateSummary error:', e); }
     try { updateDepth(spark.distribusi_kedalaman); } catch(e) { console.warn('updateDepth error:', e); }
-    try { if (spark.distribusi_magnitudo) renderMagChart(spark.distribusi_magnitudo); } catch(e) { console.warn('renderMagChart error:', e); }
-    try { if (spark.distribusi_kedalaman) renderDepthChart(spark.distribusi_kedalaman); } catch(e) { console.warn('renderDepthChart error:', e); }
+    try { if (spark.distribusi_magnitudo) { renderMagChart(spark.distribusi_magnitudo); updateMagDist(spark.distribusi_magnitudo); } } catch(e) { console.warn('renderMagChart error:', e); }
+    try { if (spark.distribusi_kedalaman) { renderDepthDoughnut(spark.distribusi_kedalaman); } } catch(e) { console.warn('renderDepthDoughnut error:', e); }
     try { if (spark.top_wilayah) renderWilayah(spark.top_wilayah); } catch(e) { console.warn('renderWilayah error:', e); }
 
     // Render Mapbox maps (non-critical — don't break connectivity status)

@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <link href="https://api.mapbox.com/mapbox-gl-js/v3.0.0/mapbox-gl.css" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css?t=1746537049"/>
+  <link rel="stylesheet" href="/static/css/style.css?t=1746780000"/>
 </head>
 <body>
 
@@ -46,89 +46,165 @@
 <!-- ══════════════════════════════════════════════════════════ -->
 <div class="tab-page active" id="page-dashboard">
 
-  <!-- Summary Cards -->
-  <div class="summary-row">
-    <div class="stat-card">
-      <div class="lbl"><i data-lucide="database" size="14"></i> Total Gempa</div>
-      <div class="val c-blu" id="s-total">—</div>
-      <div class="sub">Periode Terpantau</div>
-    </div>
-    <div class="stat-card">
-      <div class="lbl"><i data-lucide="trending-up" size="14"></i> Mag. Tertinggi</div>
-      <div class="val c-red" id="s-maxmag">—</div>
-      <div class="sub">Kekuatan Maksimum</div>
-    </div>
-    <div class="stat-card">
-      <div class="lbl"><i data-lucide="layers" size="14"></i> Rata-rata Kedalaman</div>
-      <div class="val c-cyan" id="s-depth">—</div>
-      <div class="sub">Kilometer di bawah permukaan</div>
-    </div>
-    <div class="stat-card">
-      <div class="lbl"><i data-lucide="map-pin" size="14"></i> Wilayah Teraktif</div>
-      <div class="val" id="s-wilayah" style="font-size:1.05rem;margin-top:10px;line-height:1.3">—</div>
-      <div class="sub">Frekuensi kejadian tertinggi</div>
-    </div>
-  </div>
+  <!-- ═══ SECTION 1 : Hero Space Globe ═══ -->
+  <section class="hero-space">
 
-  <!-- Dashboard 3-Column Layout -->
-  <div class="panels-top">
+    <!-- Globe fills entire hero as the background layer -->
+    <div id="map-globe"></div>
 
-    <!-- Column 1: Aktivitas Terkini (Table) -->
-    <div class="panel">
-      <div class="ph">
-        <div class="pt"><i data-lucide="alert-circle" size="18" style="color:var(--red)"></i> Terkini <span id="gempa-count" class="pb" style="margin-left:8px">0</span></div>
-        <div class="t-filters">
-          <input type="text" class="t-input" id="t-search" placeholder="Cari..." aria-label="Cari lokasi">
-        </div>
-      </div>
-      <div class="scrl" style="flex:1; max-height: 600px;">
-        <table class="gtbl">
-          <thead><tr><th>Mag</th><th>Lokasi</th><th>Waktu</th></tr></thead>
-          <tbody id="gempa-tbody"><tr><td colspan="3" class="loading">Memuat...</td></tr></tbody>
-        </table>
-      </div>
+    <!-- Space vignette: darkens edges + side gradients for panel readability -->
+    <div class="space-vignette"></div>
+
+    <!-- Live indicator badge (top-center) -->
+    <div class="hero-badge">
+      <span class="hero-badge-dot"></span>
+      LIVE &nbsp;·&nbsp; <span id="globe-count">0 titik</span>
     </div>
 
-    <!-- Column 2: Globe Map (Center) -->
-    <div class="panel">
-      <div class="ph">
-        <div class="pt"><i data-lucide="globe" size="18"></i> Peta Global 3D</div>
-        <span class="pb" id="globe-count">0 titik</span>
-      </div>
-      <div class="map-wrap" style="border:none; border-radius:0;">
-        <div id="map-globe" style="height:100%;width:100%;background:var(--surface2)"></div>
-      </div>
-    </div>
+    <!-- LEFT FLOATING PANEL -->
+    <div class="hero-side hero-side-left">
 
-    <!-- Column 3: Analitik (Right) -->
-    <div class="panel">
-      <div class="ph">
-        <div class="pt"><i data-lucide="bar-chart-3" size="18"></i> Analitik</div>
-        <span class="pb">Live</span>
-      </div>
-      <div class="panel-body scrl" style="padding:16px; flex:1; max-height: 600px;">
-        <div class="asec">
-          <div class="asec-title"><span>Magnitudo</span></div>
-          <div class="chart-wrap" style="height:140px"><canvas id="magChart"></canvas></div>
-        </div>
-        <hr class="div" style="margin:16px 0; border:0; border-top:1px solid var(--border)">
-        <div class="asec">
-          <div class="asec-title"><span>Top Wilayah</span></div>
-          <div class="wlist" id="wilayah-list"><div class="loading">Memuat...</div></div>
-        </div>
-        <hr class="div" style="margin:16px 0; border:0; border-top:1px solid var(--border)">
-        <div class="asec">
-          <div class="asec-title"><span>Kedalaman</span></div>
-          <div class="dcards">
-            <div class="dcard" style="padding:8px"><div class="dv c-grn" id="d-dang" style="font-size:1rem">—</div><div class="dl" style="font-size:0.55rem">Dangkal</div></div>
-            <div class="dcard" style="padding:8px"><div class="dv c-org" id="d-men" style="font-size:1rem">—</div><div class="dl" style="font-size:0.55rem">Menengah</div></div>
-            <div class="dcard" style="padding:8px"><div class="dv c-red" id="d-dlm" style="font-size:1rem">—</div><div class="dl" style="font-size:0.55rem">Dalam</div></div>
+      <!-- Status Seismik -->
+      <div class="hcard">
+        <div class="hcard-title"><i data-lucide="activity" size="12"></i> Status Seismik</div>
+        <div class="hstat-grid">
+          <div class="hstat">
+            <div class="hstat-label">Total Events</div>
+            <div class="hstat-val" style="color:#60a5fa" id="s-total">—</div>
+          </div>
+          <div class="hstat">
+            <div class="hstat-label">Avg Mag</div>
+            <div class="hstat-val" id="gs-avgmag">—</div>
+          </div>
+          <div class="hstat">
+            <div class="hstat-label">Max Mag</div>
+            <div class="hstat-val" style="color:#f87171" id="s-maxmag">—</div>
+          </div>
+          <div class="hstat">
+            <div class="hstat-label">Avg Kedalaman</div>
+            <div class="hstat-val" style="color:#22d3ee" id="s-depth">—</div>
+          </div>
+          <div class="hstat hstat-full">
+            <div class="hstat-label">Wilayah Teraktif</div>
+            <div class="hstat-val" style="font-size:0.8rem;line-height:1.35" id="s-wilayah">—</div>
           </div>
         </div>
       </div>
+
+      <!-- Distribusi Magnitudo -->
+      <div class="hcard">
+        <div class="hcard-title"><i data-lucide="zap" size="12"></i> Distribusi Magnitudo</div>
+        <div class="hmag-list">
+          <div class="hmag-item">
+            <span class="hmag-dot" style="background:#94a3b8"></span>
+            <span class="hmag-name">Mikro (&lt;3)</span>
+            <span class="hmag-val" id="gd-mikro">—</span>
+          </div>
+          <div class="hmag-item">
+            <span class="hmag-dot" style="background:#3b82f6"></span>
+            <span class="hmag-name">Minor (3–4)</span>
+            <span class="hmag-val" id="gd-minor">—</span>
+          </div>
+          <div class="hmag-item">
+            <span class="hmag-dot" style="background:#f97316"></span>
+            <span class="hmag-name">Sedang (4–5)</span>
+            <span class="hmag-val" id="gd-sedang">—</span>
+          </div>
+          <div class="hmag-item">
+            <span class="hmag-dot" style="background:#ef4444"></span>
+            <span class="hmag-name">Kuat (&gt;5)</span>
+            <span class="hmag-val" id="gd-kuat">—</span>
+          </div>
+        </div>
+        <div style="height:118px;margin-top:10px;"><canvas id="magChart"></canvas></div>
+      </div>
+
+    </div><!-- /hero-side-left -->
+
+    <!-- RIGHT FLOATING PANEL -->
+    <div class="hero-side hero-side-right">
+
+      <!-- Distribusi Kedalaman (Doughnut + Custom Legend) -->
+      <div class="hcard">
+        <div class="hcard-title"><i data-lucide="layers" size="12"></i> Distribusi Kedalaman</div>
+        <div style="height:148px;position:relative;"><canvas id="depthDoughnut"></canvas></div>
+        <div class="depth-custom-legend">
+          <div class="dcl-item">
+            <span class="dcl-dot" style="background:#22c55e"></span>
+            <span class="dcl-name">Dangkal (&lt;70 km)</span>
+            <span class="dcl-val" id="d-dang">—</span>
+          </div>
+          <div class="dcl-item">
+            <span class="dcl-dot" style="background:#f97316"></span>
+            <span class="dcl-name">Menengah (70–300 km)</span>
+            <span class="dcl-val" id="d-men">—</span>
+          </div>
+          <div class="dcl-item">
+            <span class="dcl-dot" style="background:#ef4444"></span>
+            <span class="dcl-name">Dalam (&gt;300 km)</span>
+            <span class="dcl-val" id="d-dlm">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Top Wilayah -->
+      <div class="hcard">
+        <div class="hcard-title"><i data-lucide="map-pin" size="12"></i> Top Wilayah</div>
+        <div class="wlist" id="wilayah-list">
+          <div style="color:rgba(255,255,255,0.35);font-size:0.75rem;padding:4px 0">Memuat...</div>
+        </div>
+      </div>
+
+    </div><!-- /hero-side-right -->
+
+    <!-- Globe Earthquake Detail Modal -->
+    <div class="gdetail-card" id="globe-detail-card">
+      <div class="gdetail-hdr">
+        <div>
+          <div><span class="gdetail-status gs-confirmed" id="gdc-status">Terkonfirmasi</span></div>
+          <div class="gdetail-title" id="gdc-title">—</div>
+        </div>
+        <button class="gdetail-close" onclick="closeGlobeDetailCard()" aria-label="Tutup"><i data-lucide="x" size="18"></i></button>
+      </div>
+      <div class="gdetail-time" id="gdc-time">—</div>
+      <div class="gdetail-rows">
+        <div class="gdetail-row"><div class="rl"><i data-lucide="zap" size="14"></i><span>Magnitudo</span></div><div class="rv gdetail-mag-val" id="gdc-mag">—</div></div>
+        <div class="gdetail-row"><div class="rl"><i data-lucide="arrow-down" size="14"></i><span>Kedalaman</span></div><div class="rv" id="gdc-depth">—</div></div>
+        <div class="gdetail-row"><div class="rl"><i data-lucide="navigation" size="14"></i><span>Koordinat</span></div><div class="rv" style="font-size:.7rem" id="gdc-coord">—</div></div>
+        <div class="gdetail-row"><div class="rl"><i data-lucide="waves" size="14"></i><span>Tsunami</span></div><div class="rv" id="gdc-tsunami">—</div></div>
+      </div>
+      <a class="gdetail-btn" id="gdc-link" href="#" target="_blank" rel="noopener">Lihat Detail USGS →</a>
     </div>
 
+    <!-- gdetail card already handled above -->
+
+  </section><!-- /hero-space -->
+
+  <!-- ─── Log 20 Gempa Terkini — below hero ─── -->
+  <div class="hero-bottom-log">
+    <div class="hbl-hdr">
+      <div class="hbl-title">
+        <span class="hbl-pulse"></span>
+        <i data-lucide="activity" size="13"></i>
+        Log 20 Gempa Terkini
+        <span class="hbl-count" id="gempa-count">0</span>
+      </div>
+      <input type="text" class="hbl-search" id="t-search" placeholder="Cari lokasi..." aria-label="Cari lokasi">
+    </div>
+    <div class="hbl-table-wrap">
+      <table class="gtbl hbl-table">
+        <thead>
+          <tr>
+            <th>Mag</th>
+            <th>Lokasi</th>
+            <th style="text-align:right;">Waktu</th>
+          </tr>
+        </thead>
+        <tbody id="gempa-tbody"><tr><td colspan="3" class="loading">Memuat...</td></tr></tbody>
+      </table>
+    </div>
   </div>
+
 </div>
 
 <!-- ══════════════════════════════════════════════════════════ -->
@@ -150,27 +226,53 @@
       <div class="map-tab" data-tab="dirasakan">Dirasakan</div>
       <div class="map-tab" data-tab="tsunami">Berpotensi Tsunami</div>
     </div>
-    <div class="map-wrap">
-      <div id="map"></div>
-      <!-- Detail Card -->
-      <div class="gdetail-card" id="gdetail-card">
-        <div class="gdetail-hdr">
-          <div>
-            <div><span class="gdetail-status gs-confirmed" id="gd-status">Terkonfirmasi</span></div>
-            <div class="gdetail-title" id="gd-title">—</div>
+    <!-- Body: sidebar + map -->
+    <div class="map-body">
+
+      <!-- LEFT SIDEBAR — earthquake list -->
+      <div class="map-sidebar" id="map-sidebar">
+        <div class="msb-hdr">
+          <div class="msb-count-row">
+            <span class="msb-count" id="msb-count">0 gempa</span>
+            <span style="font-size:0.65rem;color:var(--text-muted)">di area ini</span>
           </div>
-          <button class="gdetail-close" onclick="closeDetailCard()" aria-label="Tutup"><i data-lucide="x" size="18"></i></button>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+            <label style="font-size:0.65rem;color:var(--text-muted);flex-shrink:0;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Urut</label>
+            <select class="msb-sort" id="msb-sort">
+              <option value="time">Terbaru Dulu</option>
+              <option value="mag">Magnitudo ↓</option>
+            </select>
+          </div>
         </div>
-        <div class="gdetail-time" id="gd-time">—</div>
-        <div class="gdetail-rows">
-          <div class="gdetail-row"><div class="rl"><i data-lucide="zap" size="14"></i><span>Magnitudo</span></div><div class="rv gdetail-mag-val" id="gd-mag">—</div></div>
-          <div class="gdetail-row"><div class="rl"><i data-lucide="arrow-down" size="14"></i><span>Kedalaman</span></div><div class="rv" id="gd-depth">—</div></div>
-          <div class="gdetail-row"><div class="rl"><i data-lucide="navigation" size="14"></i><span>Koordinat</span></div><div class="rv" style="font-size:.7rem" id="gd-coord">—</div></div>
-          <div class="gdetail-row"><div class="rl"><i data-lucide="waves" size="14"></i><span>Tsunami</span></div><div class="rv" id="gd-tsunami">—</div></div>
+        <div class="msb-list" id="msb-list">
+          <div style="padding:24px 16px;text-align:center;color:var(--text-muted);font-size:0.8rem">Memuat...</div>
         </div>
-        <a class="gdetail-btn" id="gd-link" href="#" target="_blank" rel="noopener">Lihat Detail USGS →</a>
       </div>
-    </div>
+
+      <!-- MAP -->
+      <div class="map-wrap">
+        <div id="map"></div>
+        <!-- Detail Card -->
+        <div class="gdetail-card" id="gdetail-card">
+          <div class="gdetail-hdr">
+            <div>
+              <div><span class="gdetail-status gs-confirmed" id="gd-status">Terkonfirmasi</span></div>
+              <div class="gdetail-title" id="gd-title">—</div>
+            </div>
+            <button class="gdetail-close" onclick="closeDetailCard()" aria-label="Tutup"><i data-lucide="x" size="18"></i></button>
+          </div>
+          <div class="gdetail-time" id="gd-time">—</div>
+          <div class="gdetail-rows">
+            <div class="gdetail-row"><div class="rl"><i data-lucide="zap" size="14"></i><span>Magnitudo</span></div><div class="rv gdetail-mag-val" id="gd-mag">—</div></div>
+            <div class="gdetail-row"><div class="rl"><i data-lucide="arrow-down" size="14"></i><span>Kedalaman</span></div><div class="rv" id="gd-depth">—</div></div>
+            <div class="gdetail-row"><div class="rl"><i data-lucide="navigation" size="14"></i><span>Koordinat</span></div><div class="rv" style="font-size:.7rem" id="gd-coord">—</div></div>
+            <div class="gdetail-row"><div class="rl"><i data-lucide="waves" size="14"></i><span>Tsunami</span></div><div class="rv" id="gd-tsunami">—</div></div>
+          </div>
+          <a class="gdetail-btn" id="gd-link" href="#" target="_blank" rel="noopener">Lihat Detail USGS →</a>
+        </div>
+      </div>
+
+    </div><!-- /map-body -->
   </div>
 </div>
 
@@ -210,6 +312,6 @@
 <script src="https://unpkg.com/lucide@latest"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.0.0/mapbox-gl.js"></script>
-<script src="/static/js/app.js?t=1746537200"></script>
+<script src="/static/js/app.js?t=1746790000"></script>
 </body>
 </html>

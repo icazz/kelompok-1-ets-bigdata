@@ -1,0 +1,68 @@
+{
+  "source": "spark_hdfs",
+  "total_gempa": 160,
+  "avg_magnitude": 4.63,
+  "max_magnitude": 5.8,
+  "rata_rata_kedalaman": 173.9,
+  "distribusi_magnitudo": {
+    "Mikro (<3)": 0,
+    "Minor (3-4)": 0,
+    "Sedang (4-5)": 136,
+    "Kuat (>5)": 24
+  },
+  "top_wilayah": [
+    {
+      "wilayah": "Lospalos, Timor Leste",
+      "count": 16
+    },
+    {
+      "wilayah": "Tobelo, Indonesia",
+      "count": 16
+    },
+    {
+      "wilayah": "Banda Sea",
+      "count": 13
+    },
+    {
+      "wilayah": "Palimbang, Philippines",
+      "count": 8
+    },
+    {
+      "wilayah": "Cilacap, Indonesia",
+      "count": 8
+    },
+    {
+      "wilayah": "Metinaro, Timor Leste",
+      "count": 8
+    },
+    {
+      "wilayah": "Ternate, Indonesia",
+      "count": 8
+    },
+    {
+      "wilayah": "Sanana, Indonesia",
+      "count": 8
+    },
+    {
+      "wilayah": "Ransiki, Indonesia",
+      "count": 8
+    },
+    {
+      "wilayah": "Tambolaka, Indonesia",
+      "count": 8
+    }
+  ],
+  "distribusi_kedalaman": {
+    "Dangkal (<70 km)": 69,
+    "Menengah (70-300 km)": 59,
+    "Dalam (>300 km)": 32
+  },
+  "wilayah_teraktif": "Lospalos, Timor Leste",
+  "mllib": {
+    "tren": "naik",
+    "koefisien_per_jam": 0.001787,
+    "rmse": 0.3959,
+    "r2": 0.0517
+  },
+  "last_updated": "2026-05-06 06:47:33 UTC"
+}
