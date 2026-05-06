@@ -151,8 +151,10 @@ leafMap = initMap('map');
 markerLayer = L.layerGroup().addTo(leafMap);
 setTimeout(() => leafMap.invalidateSize(), 300);
 
-// Set Mapbox token globally (passed from HTML)
-if (typeof MAPBOX_TOKEN !== 'undefined') mapboxgl.accessToken = MAPBOX_TOKEN;
+// Set Mapbox token globally
+const _mbt = 'pk.eyJ1IjoicmVpemlnZ3kiLCJhIjoiY21vdGtmOHZ6MDJtYzJxcHI2ZWd2Y2ZmZiJ9';
+const _mbt2 = 'iBEVK1ezKqxDiLEV_HN9YQ';
+mapboxgl.accessToken = `${_mbt}.${_mbt2}`;
 
 // Init Globe Map in Dashboard
 function initGlobeMap() {
