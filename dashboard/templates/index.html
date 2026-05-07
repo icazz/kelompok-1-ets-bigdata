@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <link href="https://api.mapbox.com/mapbox-gl-js/v3.0.0/mapbox-gl.css" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css?t=1746780000"/>
+  <link rel="stylesheet" href="/static/css/style.css?v=2.0"/>
 </head>
 <body>
 
@@ -249,7 +249,6 @@
         </div>
       </div>
 
-      <!-- MAP -->
       <div class="map-wrap">
         <div id="map"></div>
         <!-- Detail Card -->
@@ -276,12 +275,26 @@
   </div>
 </div>
 
+
 <!-- ══════════════════════════════════════════════════════════ -->
 <!-- TAB 3: PETA 3D (FULL SCREEN)                              -->
 <!-- ══════════════════════════════════════════════════════════ -->
 <div class="tab-page page-full" id="page-peta3d">
-  <div id="map3d" style="height:100%; width:100%; background:#000"></div>
-  <div class="ph" style="position:absolute; top:20px; left:20px; z-index:10; background:rgba(0,0,0,0.7); backdrop-filter:blur(10px); border-radius:10px; border:1px solid var(--border); padding:10px 20px; pointer-events:none;">
+  <!-- Sidebar for 3D Map -->
+  <div class="map-sidebar map-sidebar-3d" id="map3d-sidebar">
+    <div class="msb-hdr">
+      <div class="msb-count-row">
+        <span class="msb-count" id="map3d-count-sidebar">0 gempa</span>
+        <span style="font-size:0.65rem;color:var(--text-muted)">Real-time List</span>
+      </div>
+    </div>
+    <div class="msb-list" id="map3d-list">
+      <div style="padding:24px 16px;text-align:center;color:var(--text-muted);font-size:0.8rem">Memuat...</div>
+    </div>
+  </div>
+
+  <div id="map3d"></div>
+  <div class="ph" style="position:absolute; top:20px; left:320px; z-index:10; background:rgba(0,0,0,0.7); backdrop-filter:blur(10px); border-radius:10px; border:1px solid var(--border); padding:10px 20px; pointer-events:none;">
     <div class="pt" style="color:#fff"><i data-lucide="navigation-2" size="18"></i> Visualisasi 3D <span id="map3d-count" class="pb" style="margin-left:10px; background:rgba(255,255,255,0.1); border:none; color:#fff">0 titik</span></div>
   </div>
 </div>
@@ -300,8 +313,8 @@
     </div>
   </div>
 </div>
-
 </main>
+
 
 <footer>
   GempaRadar · Kelompok 1 Big Data UTS · Data: USGS FDSN API + Google News RSS · Pipeline: Kafka → HDFS → Spark → Dashboard
@@ -312,6 +325,6 @@
 <script src="https://unpkg.com/lucide@latest"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.0.0/mapbox-gl.js"></script>
-<script src="/static/js/app.js?t=1746790000"></script>
+<script src="/static/js/app.js?v=2.0"></script>
 </body>
 </html>

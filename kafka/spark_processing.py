@@ -1,4 +1,4 @@
-import json
+﻿import json
 import os
 from datetime import datetime, timezone
 
@@ -10,11 +10,11 @@ from pyspark.sql.functions import (
 from pyspark.ml.feature import VectorAssembler
 from pyspark.ml.regression import LinearRegression as SparkLR
 
-# â”€â”€ 1. SparkSession â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# 1. SparkSession 
 spark = SparkSession.builder \
     .appName("GempaRadar-Analysis") \
-    .master("spark://localhost:7077") \
-    .config("spark.hadoop.fs.defaultFS", "hdfs://localhost:8020") \
+    .master("spark://spark-master:7077") \
+    .config("spark.hadoop.fs.defaultFS", "hdfs://hadoop-namenode:8020") \
     .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,io.delta:delta-spark_2.12:3.1.0") \
     .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
     .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
@@ -22,30 +22,28 @@ spark = SparkSession.builder \
 
 spark.sparkContext.setLogLevel("WARN")
 
-HDFS_API  = "hdfs://localhost:8020/data/gempa/api/"
-HDFS_RSS  = "hdfs://localhost:8020/data/gempa/rss/"
-HDFS_HASIL = "hdfs://localhost:8020/data/gempa/hasil/"
+HDFS_API  = "hdfs://hadoop-namenode:8020/data/gempa/api/"
+HDFS_RSS  = "hdfs://hadoop-namenode:8020/data/gempa/rss/"
+HDFS_HASIL = "hdfs://hadoop-namenode:8020/data/gempa/hasil/"
 
 print("\n" + "="*60)
-print("  GempaRadar Analytics â€” Batch Analysis from HDFS")
+print("  GempaRadar Analytics ” Batch Analysis from HDFS")
 print("="*60)
 
-# â”€â”€ 2. BACA DATA API DARI HDFS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# 2. BACA DATA API DARI HDFS 
 df = spark.read.json(HDFS_API)
 total = df.count()
 print(f"\nTotal record API dari HDFS: {total}")
 
 if total == 0:
-    print("âš ï¸  Data HDFS kosong. Jalankan consumer terlebih dahulu.")
+    print("Data HDFS kosong. Jalankan consumer terlebih dahulu.")
     spark.stop()
     exit(0)
 
 # Buat temp view untuk Spark SQL
 df.createOrReplaceTempView("gempa")
 
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-# ANALISIS WAJIB 1 â€” Distribusi Magnitudo (DataFrame API)
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# ANALISIS WAJIB 1 Distribusi Magnitudo (DataFrame API)
 print("\n[Analisis 1] Distribusi Magnitudo")
 df_mag = df.withColumn("kategori_mag",
     when(col("magnitude") < 3, "Mikro (<3)")
@@ -67,9 +65,7 @@ mag_ordered = {
     "Kuat (>5)":    mag_dist_raw.get("Kuat (>5)", 0),
 }
 
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-# ANALISIS WAJIB 2 â€” Top 10 Wilayah Aktif (Spark SQL)
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# ANALISIS WAJIB 2 Top 10 Wilayah Aktif (Spark SQL)
 print("\n[Analisis 2] Top 10 Wilayah Paling Aktif (Spark SQL)")
 df_wilayah = spark.sql("""
     SELECT
@@ -93,9 +89,7 @@ top_wilayah = [
     for row in df_wilayah.collect()
 ]
 
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-# ANALISIS WAJIB 3 â€” Distribusi Kedalaman (Spark SQL)
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# ANALISIS WAJIB 3 Distribusi Kedalaman (Spark SQL)
 print("\n[Analisis 3] Distribusi & Statistik Kedalaman (Spark SQL)")
 df_depth = spark.sql("""
     SELECT
@@ -122,9 +116,7 @@ depth_stats = {
 avg_depth    = float(d["rata_rata_depth"]) if d["rata_rata_depth"] else 0
 max_depth    = float(d["depth_max"]) if d["depth_max"] else 0
 
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # STATISTIK RINGKASAN
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 stats_row = spark.sql("""
     SELECT
         COUNT(*) AS total,
@@ -133,7 +125,7 @@ stats_row = spark.sql("""
     FROM gempa
 """).collect()[0]
 
-# â”€â”€ 3. SIMPAN HASIL KE HDFS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# 3. SIMPAN HASIL KE HDFS
 # ══════════════════════════════════════════════════════════════
 # BONUS +5 — Spark MLlib: Linear Regression Tren Magnitudo
 # ══════════════════════════════════════════════════════════════
@@ -188,7 +180,7 @@ df_mag.write.mode("overwrite").json(HDFS_HASIL + "distribusi_magnitudo")
 df_depth.write.mode("overwrite").json(HDFS_HASIL + "distribusi_kedalaman")
 print(f"âœ… Hasil tersimpan di HDFS: {HDFS_HASIL}")
 
-# â”€â”€ 4. SIMPAN spark_results.json UNTUK DASHBOARD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# 4. SIMPAN spark_results.json UNTUK DASHBOARD
 spark_results = {
     "source":                "spark_hdfs",
     "total_gempa":           int(stats_row["total"]),

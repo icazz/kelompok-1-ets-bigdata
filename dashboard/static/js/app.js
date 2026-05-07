@@ -443,8 +443,65 @@ function sidebarSelect(g, id) {
 // Sort handler
 document.getElementById('msb-sort')?.addEventListener('change', e => {
   sidebarSortMode = e.target.value;
-  renderMapSidebar(filterByTab(allGempa, activeTab));
+  const list = filterByTab(allGempa, activeTab);
+  renderMapSidebar(list);
+  if (map3dInitialized) renderMap3DSidebar(list);
 });
+
+// ── 3D Map Sidebar Rendering ──
+function renderMap3DSidebar(list) {
+  const el = document.getElementById('map3d-list');
+  const countEl = document.getElementById('map3d-count-sidebar');
+  if (!el) return;
+
+  let sorted = [...list].sort((a, b) => (b.event_time || '').localeCompare(a.event_time || ''));
+  if (countEl) countEl.textContent = sorted.length + ' gempa';
+
+  if (!sorted.length) {
+    el.innerHTML = '<div style="padding:24px 16px;text-align:center;color:var(--text-muted);font-size:0.8rem">Tidak ada data real-time</div>';
+    return;
+  }
+
+  el.innerHTML = sorted.map(g => {
+    const m = g.magnitude || 0;
+    const depth = g.depth_km || 0;
+    const id = (g.id || (g.place + g.event_time)) + '-3d';
+    const isActive = id === activeSidebarId;
+    const safeG = JSON.stringify(g).replace(/"/g, '&quot;');
+    return `<div class="msb-item${isActive ? ' active' : ''}" data-msb-id="${id}"
+      onclick="sidebarSelect3D(${safeG}, '${id}')">
+      <div class="msb-mag" style="background:${magColor(m)}">${m.toFixed(1)}</div>
+      <div class="msb-info">
+        <div class="msb-place">${g.place || '—'}</div>
+        <div class="msb-meta">
+          <span>${fmtShort(g.event_time)}</span>
+          <span class="msb-badge">${depth.toFixed(0)} km</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function sidebarSelect3D(g, id) {
+  activeSidebarId = id;
+  document.querySelectorAll('#map3d-list .msb-item').forEach(el => el.classList.remove('active'));
+  const target = document.querySelector(`#map3d-list .msb-item[data-msb-id="${id}"]`);
+  if (target) {
+    target.classList.add('active');
+    target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+  if (map3d && g.latitude && g.longitude) {
+    map3d.flyTo({
+      center: [g.longitude, g.latitude],
+      zoom: 12,
+      pitch: 60,
+      bearing: 0,
+      speed: 1.5,
+      curve: 1,
+      essential: true
+    });
+  }
+}
 
 // ── Render Mapbox (Globe & 3D) ──
 function renderMapboxMarkers(mapInstance, list, countId) {
@@ -463,46 +520,54 @@ function renderMapboxMarkers(mapInstance, list, countId) {
 
   const isGlobe = mapInstance.getContainer().id === 'map-globe';
 
+  const now = Date.now(), H24 = 86400000;
+
   list.forEach(g => {
     if (!g.latitude || !g.longitude) return;
     const m=g.magnitude||0, cl=magColor(m), r=magR(m);
-    
+    const eventMs = g.event_time ? new Date(g.event_time).getTime() : 0;
+    const isRecent = eventMs > 0 && (now - eventMs) < H24;
+
     // Create a DOM element for each marker
     const el = document.createElement('div');
-    el.className = 'mapbox-marker';
+    el.className = 'mapbox-marker' + (isRecent ? ' mapbox-marker-pulse' : '');
     el.style.width = (r*2) + 'px';
     el.style.height = (r*2) + 'px';
     el.style.borderRadius = '50%';
     el.style.background = cl;
-    el.style.opacity = '0.85';
-    el.style.border = '1.5px solid rgba(255,255,255,0.3)';
+    el.style.opacity = isRecent ? '1' : '0.8';
+    el.style.border = '1.5px solid rgba(255,255,255,0.4)';
     el.style.display = 'flex';
     el.style.alignItems = 'center';
     el.style.justifyContent = 'center';
     el.style.cursor = 'pointer';
+    el.style.zIndex = isRecent ? '10' : '1';
     el.innerHTML = `<span style="color:#fff;font-size:${Math.max(7,r*0.85)}px;font-weight:700;text-shadow:0 1px 3px rgba(0,0,0,.8)">${m.toFixed(1)}</span>`;
     
+    if (isRecent) {
+      const ring = document.createElement('div');
+      ring.className = 'mapbox-marker-pulse-ring';
+      ring.style.setProperty('--pulse-color', cl);
+      el.appendChild(ring);
+    }
+
     // Fly to location on click
     el.addEventListener('click', (e) => {
       e.stopPropagation();
-      const z = mapInstance.getContainer().id === 'map3d' ? 16 : (isGlobe ? 6 : 8);
+      const z = mapInstance.getContainer().id === 'map3d' ? 14 : (isGlobe ? 6 : 8);
       mapInstance.flyTo({
         center: [g.longitude, g.latitude],
         zoom: z,
+        pitch: mapInstance.getContainer().id === 'map3d' ? 65 : 0,
         speed: 1.2,
-        curve: 1.4,
         essential: true
       });
       if (isGlobe) showGlobeDetailCard(g);
+      if (mapInstance.getContainer().id === 'map3d') sidebarSelect3D(g, (g.id || (g.place + g.event_time)) + '-3d');
     });
 
-    // Add marker to map (with popup only for non-globe)
-    const markerObj = new mapboxgl.Marker(el).setLngLat([g.longitude, g.latitude]);
-    if (!isGlobe) {
-      markerObj.setPopup(new mapboxgl.Popup({ offset: 25 })
-        .setHTML(`<strong>${g.place||'—'}</strong><br/>Mag: ${m.toFixed(1)}<br/>Kedalaman: ${g.depth_km} km`));
-    }
-    markerObj.addTo(mapInstance);
+    // Add marker to map
+    new mapboxgl.Marker(el).setLngLat([g.longitude, g.latitude]).addTo(mapInstance);
   });
 }
 
@@ -574,7 +639,11 @@ function renderGempa(list) {
     const isNew = lastDataIds.size > 0 && !lastDataIds.has(id);
     const pt = (g.place||'').length > 35 ? g.place.slice(0,35)+'…' : (g.place||'—');
     const gl = g._count > 1 ? `<div style="font-size:.55rem;color:var(--orange);font-weight:700;">${g._count} events</div>` : '';
-    if (isNew && m >= 5.0) { showToast(`Gempa Baru M${m.toFixed(1)}`, `${g.place}`, true); playAlertSound(); }
+    if (isNew) {
+      const title = m >= 5.0 ? `⚠️ Gempa KUAT Baru: M${m.toFixed(1)}` : `Gempa Baru: M${m.toFixed(1)}`;
+      showToast(title, `${g.place}`, m >= 5.0);
+      if (m >= 4.0) playAlertSound();
+    }
     return `<tr class="${isNew?'new-row':''}" onclick="leafMap.setView([${g.latitude},${g.longitude}], 8); showDetailCard(${JSON.stringify(g).replace(/"/g, '&quot;')}, 'map');" style="cursor:pointer">
       <td><span class="mbadge ${magCls(m)}" style="min-width:38px; font-size:0.8rem;">${m.toFixed(1)}</span></td>
       <td class="place-cell" style="font-size:0.75rem;">${pt}${gl}</td>
@@ -622,15 +691,9 @@ function renderBerita(list) {
   document.getElementById('berita-count').textContent = list.length + ' artikel';
   if (!list.length) { el.innerHTML='<div class="loading">Belum ada berita</div>'; return; }
   el.innerHTML = list.map((n,i) => {
-    const [c1,c2] = GRAD[i%GRAD.length];
-    const imgUrl = n.image_url||'';
     const src = (n.source||'News Source').replace(/Google News \((.+?)\)/,'$1');
     const time = n.published_time ? timeAgo(n.published_time) : 'Baru saja';
-    const img = imgUrl && imgUrl !== 'None'
-      ? `<img src="${imgUrl}" alt="News" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="nimg-fallback" style="display:none;background:linear-gradient(135deg,${c1},${c2})"><i data-lucide="newspaper" size="48"></i></div>`
-      : `<div class="nimg-fallback" style="background:linear-gradient(135deg,${c1},${c2})"><i data-lucide="newspaper" size="48"></i></div>`;
-    return `<div class="nitem">
-      <div class="nimg">${img}<div class="nimg-src">${src}</div></div>
+    return `<div class="nitem nitem-compact">
       <div class="ncontent">
         <a href="${n.link||n.url||'#'}" target="_blank" rel="noopener">${n.title}</a>
         <div class="nmeta">
@@ -792,7 +855,12 @@ async function fetchAndRender() {
 
     // Render Mapbox maps (non-critical — don't break connectivity status)
     try { if (mapGlobe) renderMapboxMarkers(mapGlobe, allGempa, 'globe-count'); } catch(e) { console.warn('Globe render error:', e); }
-    try { if (map3dInitialized && map3d) renderMapboxMarkers(map3d, allGempa, 'map3d-count'); } catch(e) { console.warn('Map3D render error:', e); }
+    try { 
+      if (map3dInitialized && map3d) {
+        renderMapboxMarkers(map3d, allGempa, 'map3d-count');
+        renderMap3DSidebar(allGempa);
+      }
+    } catch(e) { console.warn('Map3D render error:', e); }
 
     const lastUpEl = document.getElementById('last-update');
     if (lastUpEl) lastUpEl.textContent = 'Sync: ' + new Date().toLocaleTimeString('id-ID');
