@@ -100,12 +100,82 @@ Setelah demonstrasi berjalan, riwayat perubahan tercatat dengan rapi di dalam fo
 
 ---
 
+## 🥇 Dokumentasi Gold Layer — Reproduksi Analisis ETS (Anggota 3)
+
+Gold Layer merupakan tahap akhir dalam arsitektur Data Lakehouse, di mana data yang telah dibersihkan di Silver Layer diolah menjadi **tabel analitik siap pakai** (*business-ready aggregates*). Script `03_gold_ets.py` mereproduksi seluruh analisis wajib dari `kafka/spark_processing.py` (ETS asli) dengan perbedaan kunci:
+
+| Aspek | ETS Asli (`spark_processing.py`) | Gold Reproduksi (`03_gold_ets.py`) |
+| :--- | :--- | :--- |
+| **Input** | HDFS JSON mentah (`/data/gempa/api/`) | Silver Delta (`lakehouse_data/silver/gempa_api`) |
+| **Output** | HDFS JSON + `spark_results.json` | **Gold Delta tables** + `spark_results.json` |
+| **Kualitas Data** | Data mentah, mungkin ada duplikat/error | Data sudah bersih (deduplicated, filtered, typed) |
+| **Reproducibility** | Bergantung pada ketersediaan HDFS | Delta Lake menjamin data versioned & reproducible |
+
+### 📊 Analisis yang Direproduksi
+
+#### Analisis 1 — Distribusi Magnitudo (DataFrame API)
+Mengkategorikan setiap gempa berdasarkan kekuatannya menggunakan `when/otherwise`:
+- **Mikro (<3)**: Gempa sangat kecil, tidak terasa oleh manusia
+- **Minor (3-4)**: Terasa getaran ringan, jarang menyebabkan kerusakan
+- **Sedang (4-5)**: Getaran signifikan, potensi kerusakan ringan
+- **Kuat (>5)**: Berpotensi merusak, perlu respons BPBD segera
+
+**Output Delta**: `gold/ets_distribusi_magnitudo`
+
+#### Analisis 2 — Top 10 Wilayah Paling Aktif (Spark SQL)
+Menghitung frekuensi gempa per wilayah dengan `REGEXP_REPLACE` untuk mengekstrak nama wilayah dari kolom `place`, lalu mengurutkan berdasarkan jumlah kejadian terbanyak. Membantu BPBD memprioritaskan penempatan sensor dan tim respons.
+
+**Output Delta**: `gold/ets_top_wilayah`
+
+#### Analisis 3 — Distribusi & Statistik Kedalaman (Spark SQL)
+Mengkategorikan gempa berdasarkan kedalaman pusat gempa:
+- **Dangkal (<70 km)**: Paling berbahaya, dekat permukaan, potensi tsunami
+- **Menengah (70-300 km)**: Getaran moderat di permukaan
+- **Dalam (>300 km)**: Energi teredam sebelum sampai permukaan
+
+Ditambah statistik rata-rata, maksimum, dan minimum kedalaman.
+
+**Output Delta**: `gold/ets_distribusi_kedalaman`
+
+#### Statistik Ringkasan
+Agregasi keseluruhan: total gempa, rata-rata/max/min magnitudo, standar deviasi, dan statistik kedalaman.
+
+**Output Delta**: `gold/ets_statistik_ringkasan`
+
+#### Bonus — Spark MLlib Linear Regression
+Prediksi tren magnitudo gempa seiring waktu menggunakan `VectorAssembler` + `LinearRegression`. Menghasilkan koefisien tren (naik/turun), RMSE, dan R².
+
+**Output Delta**: `gold/ets_mllib_tren`
+
+### 📁 Ringkasan Output Gold ETS
+
+```text
+lakehouse_data/gold/
+├── ets_distribusi_magnitudo/    (4 baris: Mikro, Minor, Sedang, Kuat)
+├── ets_top_wilayah/             (N baris: semua wilayah + count)
+├── ets_distribusi_kedalaman/    (1 baris: dangkal, menengah, dalam, stats)
+├── ets_statistik_ringkasan/     (1 baris: total, avg, max, min, stddev)
+└── ets_mllib_tren/              (1 baris: koefisien, RMSE, R², tren)
+```
+
+Selain Gold Delta, script juga meng-update `dashboard/data/spark_results.json` dengan `source: "gold_delta_ets"` agar dashboard Flask dapat menampilkan hasil analisis terbaru.
+
+---
+
 ## 🔍 Cara Verifikasi & Lokasi Data
-* **Lokasi Data Silver API:** [gempa_api/](file:///c:/Users/Asus/Documents/semester%204/BIG DATA/kelompok-1-ets-bigdata/lakehouse/lakehouse_data/silver/gempa_api)
-* **Lokasi Data Silver RSS:** [gempa_rss/](file:///c:/Users/Asus/Documents/semester%204/BIG DATA/kelompok-1-ets-bigdata/lakehouse/lakehouse_data/silver/gempa_rss)
+* **Lokasi Data Silver API:** `lakehouse_data/silver/gempa_api/`
+* **Lokasi Data Silver RSS:** `lakehouse_data/silver/gempa_rss/`
+* **Lokasi Data Gold ETS:** `lakehouse_data/gold/ets_*/`
 
 Gunakan perintah terminal PowerShell berikut untuk melihat berkas transaksi:
 ```powershell
+# Silver
 ls lakehouse/lakehouse_data/silver/gempa_api/_delta_log/
+
+# Gold ETS
+ls lakehouse/lakehouse_data/gold/ets_distribusi_magnitudo/_delta_log/
+ls lakehouse/lakehouse_data/gold/ets_top_wilayah/_delta_log/
+ls lakehouse/lakehouse_data/gold/ets_distribusi_kedalaman/_delta_log/
 ```
-*(Anda harus melihat file `00000000000000000000.json`, `00000000000000000001.json`, dan `00000000000000000002.json` yang mencatat tiga transaksi di atas)*.
+*(Anda harus melihat file `00000000000000000000.json` di setiap folder `_delta_log/` yang mencatat transaksi WRITE awal)*.
+

@@ -1,68 +1,68 @@
 {
-  "source": "spark_hdfs",
-  "total_gempa": 52160,
-  "avg_magnitude": 4.55,
-  "max_magnitude": 5.8,
-  "rata_rata_kedalaman": 111.1,
+  "source": "gold_delta_ets",
+  "total_gempa": 142,
+  "avg_magnitude": 4.52,
+  "max_magnitude": 6.2,
+  "rata_rata_kedalaman": 97.3,
   "distribusi_magnitudo": {
     "Mikro (<3)": 0,
     "Minor (3-4)": 0,
-    "Sedang (4-5)": 44854,
-    "Kuat (>5)": 7306
+    "Sedang (4-5)": 125,
+    "Kuat (>5)": 17
   },
   "top_wilayah": [
     {
       "wilayah": "Ternate, Indonesia",
-      "count": 7961
+      "count": 18
     },
     {
       "wilayah": "Bitung, Indonesia",
-      "count": 5344
+      "count": 17
     },
     {
       "wilayah": "Lospalos, Timor Leste",
-      "count": 4767
-    },
-    {
-      "wilayah": "Modisi, Indonesia",
-      "count": 3180
-    },
-    {
-      "wilayah": "Abepura, Indonesia",
-      "count": 2141
+      "count": 11
     },
     {
       "wilayah": "Tual, Indonesia",
-      "count": 2090
-    },
-    {
-      "wilayah": "Gunungsitoli, Indonesia",
-      "count": 2072
+      "count": 9
     },
     {
       "wilayah": "Tobelo, Indonesia",
-      "count": 1728
+      "count": 8
+    },
+    {
+      "wilayah": "Modisi, Indonesia",
+      "count": 7
+    },
+    {
+      "wilayah": "Abepura, Indonesia",
+      "count": 7
+    },
+    {
+      "wilayah": "Gunungsitoli, Indonesia",
+      "count": 5
     },
     {
       "wilayah": "Banda Sea",
-      "count": 1587
+      "count": 4
     },
     {
-      "wilayah": "Sarangani, Philippines",
-      "count": 1572
+      "wilayah": "Pante Makasar, Timor Leste",
+      "count": 3
     }
   ],
   "distribusi_kedalaman": {
-    "Dangkal (<70 km)": 29236,
-    "Menengah (70-300 km)": 18190,
-    "Dalam (>300 km)": 4734
+    "Dangkal (<70 km)": 86,
+    "Menengah (70-300 km)": 46,
+    "Dalam (>300 km)": 10
   },
   "wilayah_teraktif": "Ternate, Indonesia",
   "mllib": {
     "tren": "naik",
-    "koefisien_per_jam": 0.000322,
-    "rmse": 0.3547,
-    "r2": 0.0252
+    "koefisien_per_jam": 0.000289,
+    "rmse": 0.3565,
+    "r2": 0.0288
   },
-  "last_updated": "2026-05-08 08:32:18 UTC"
+  "last_updated": "2026-05-29 07:53:10 UTC"
 }

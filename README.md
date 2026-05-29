@@ -1,4 +1,4 @@
-﻿# 🌏 GempaRadar: Real-Time Earthquake Monitoring System
+# 🌏 GempaRadar: Real-Time Earthquake Monitoring System
 
 > **ETS Big Data — Kelompok 1 | Mata Kuliah: Big Data dan Data Lakehouse**
 
@@ -444,6 +444,13 @@ kelompok-1-ets-bigdata/
 │   ├── consumer_to_hdfs.py    ← Ica Zika Hamizah
 │   ├── spark_processing.py    ← Arya Bisma Putra Refman
 │   └── spark_runner.py        ← Otomatisasi Spark (setiap 10 menit)
+├── lakehouse/                     ← Data Lakehouse Pipeline (Bronze → Silver → Gold)
+│   ├── 00_setup.md            ← Panduan setup & cara menjalankan
+│   ├── 01_bronze.py           ← Anggota 1: Ingestion ke Bronze Delta
+│   ├── 02_silver.py           ← Anggota 2: Cleaning + Time Travel
+│   ├── 03_gold_ets.py         ← Anggota 3: Reproduksi Analisis ETS ke Gold Delta
+│   ├── README_lakehouse.md    ← Dokumentasi teknis Silver & Gold Layer
+│   └── lakehouse_data/        ← Output Delta tables (bronze/, silver/, gold/)
 └── dashboard/
     ├── app.py                 ← M. Hikari Reiziq Rakhmadinta
     ├── templates/

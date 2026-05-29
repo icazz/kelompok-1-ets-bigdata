@@ -98,9 +98,35 @@ Script ini mendemonstrasikan kekuatan pencatatan riwayat transaksi (*transaction
 
 ---
 
+## 🥇 Cara Menjalankan Gold Layer — Reproduksi ETS (Anggota 3)
+
+Setelah data Silver berhasil terbentuk, Anda dapat mengeksekusi pipeline **Gold Layer** yang mereproduksi seluruh analisis wajib ETS dari `kafka/spark_processing.py`. Perbedaan utamanya: data dibaca dari **Silver Delta** (bukan HDFS JSON mentah) dan hasilnya disimpan sebagai **Gold Delta tables**.
+
+```bash
+# Jalankan script Gold Layer ETS
+python lakehouse/03_gold_ets.py
+```
+
+### ⚙️ Analisis yang Direproduksi
+Script ini mereproduksi **3 analisis wajib + 1 bonus MLlib** yang identik dengan `kafka/spark_processing.py`:
+
+| No | Analisis | Metode | Output Gold Delta |
+| :--- | :--- | :--- | :--- |
+| **1** | **Distribusi Magnitudo** | DataFrame API (`when/otherwise`) | `gold/ets_distribusi_magnitudo` |
+| **2** | **Top 10 Wilayah Aktif** | Spark SQL (`REGEXP_REPLACE + GROUP BY`) | `gold/ets_top_wilayah` |
+| **3** | **Distribusi & Statistik Kedalaman** | Spark SQL (`SUM CASE WHEN + AVG/MAX/MIN`) | `gold/ets_distribusi_kedalaman` |
+| **4** | **Statistik Ringkasan** | Spark SQL (`COUNT, AVG, MAX, MIN, STDDEV`) | `gold/ets_statistik_ringkasan` |
+| **Bonus** | **Spark MLlib Linear Regression** | `VectorAssembler + LinearRegression` | `gold/ets_mllib_tren` |
+
+### 📝 Catatan Penting
+- Script ini juga menghasilkan file `dashboard/data/spark_results.json` untuk ditampilkan di Flask Dashboard (sama seperti `spark_processing.py` asli).
+- Auto-redirect ke Docker container `spark-master` akan aktif jika dijalankan dari Windows tanpa `HADOOP_HOME`.
+
+---
+
 ## 📊 Output yang Dihasilkan
 
-Setelah kedua script berhasil dijalankan, data akan tersimpan dalam format **Delta Lake (Parquet + Transaction Log)** pada path relatif berikut:
+Setelah ketiga script berhasil dijalankan, data akan tersimpan dalam format **Delta Lake (Parquet + Transaction Log)** pada path relatif berikut:
 
 ```text
 kelompok-1-ets-bigdata/
@@ -113,11 +139,27 @@ kelompok-1-ets-bigdata/
         │   └── gempa_rss/   <-- Tabel Delta Bronze RSS
         │       ├── _delta_log/
         │       └── part-*.parquet
-        └── silver/
-            ├── gempa_api/   <-- Tabel Delta Silver API (Bersih & Versi Terkini)
+        ├── silver/
+        │   ├── gempa_api/   <-- Tabel Delta Silver API (Bersih & Versi Terkini)
+        │   │   ├── _delta_log/
+        │   │   └── part-*.parquet
+        │   └── gempa_rss/   <-- Tabel Delta Silver RSS (Bersih & Bebas HTML)
+        │       ├── _delta_log/
+        │       └── part-*.parquet
+        └── gold/
+            ├── ets_distribusi_magnitudo/   <-- Kategori Mikro/Minor/Sedang/Kuat
             │   ├── _delta_log/
             │   └── part-*.parquet
-            └── gempa_rss/   <-- Tabel Delta Silver RSS (Bersih & Bebas HTML)
+            ├── ets_top_wilayah/            <-- Ranking wilayah gempa aktif
+            │   ├── _delta_log/
+            │   └── part-*.parquet
+            ├── ets_distribusi_kedalaman/   <-- Dangkal/Menengah/Dalam + statistik
+            │   ├── _delta_log/
+            │   └── part-*.parquet
+            ├── ets_statistik_ringkasan/    <-- Summary stats (total, avg, max, min)
+            │   ├── _delta_log/
+            │   └── part-*.parquet
+            └── ets_mllib_tren/             <-- Hasil Linear Regression MLlib
                 ├── _delta_log/
                 └── part-*.parquet
 ```
@@ -136,5 +178,12 @@ ls lakehouse/lakehouse_data/bronze/gempa_rss/
 # 2. Cek isi folder output Silver
 ls lakehouse/lakehouse_data/silver/gempa_api/
 ls lakehouse/lakehouse_data/silver/gempa_rss/
+
+# 3. Cek isi folder output Gold (ETS)
+ls lakehouse/lakehouse_data/gold/ets_distribusi_magnitudo/
+ls lakehouse/lakehouse_data/gold/ets_top_wilayah/
+ls lakehouse/lakehouse_data/gold/ets_distribusi_kedalaman/
+ls lakehouse/lakehouse_data/gold/ets_statistik_ringkasan/
+ls lakehouse/lakehouse_data/gold/ets_mllib_tren/
 ```
 Pastikan folder `_delta_log/` (log transaksi) dan file data `.parquet` sudah terbuat di masing-masing direktori.
