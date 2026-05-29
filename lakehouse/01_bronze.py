@@ -147,7 +147,9 @@ def read_data(spark, hdfs_path, local_fallback_path, source_name):
             print("    [!] Membuat DataFrame kosong untuk mencegah kegagalan fatal...")
             raise FileNotFoundError(f"File local tidak ditemukan pada path {local_fallback_path}")
             
-        df = spark.read.option("multiLine", True).json(local_fallback_path)
+        # PENTING: Tambahkan prefix 'file://' agar Spark membaca dari filesystem lokal container, bukan HDFS
+        local_spark_path = f"file://{os.path.abspath(local_fallback_path).replace(os.sep, '/')}"
+        df = spark.read.option("multiLine", True).json(local_spark_path)
         record_count = df.count()
         print(f"    -> [SUKSES] Berhasil membaca file lokal ({record_count} record).")
         

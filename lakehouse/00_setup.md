@@ -1,6 +1,6 @@
 # Setup Spark + Delta Lake untuk GempaRadar Lakehouse
 
-Dokumen ini berisi panduan untuk melakukan setup environment dan menjalankan pipeline data **Bronze Layer** pada sistem GempaRadar. Panduan ini ditujukan bagi seluruh anggota Kelompok 1 ETS Big Data.
+Dokumen ini berisi panduan untuk melakukan setup environment, menjalankan pipeline data **Bronze Layer** (Ingestion) dan **Silver Layer** (Pembersihan & Time Travel) pada sistem GempaRadar. Panduan ini ditujukan bagi seluruh anggota Kelompok 1 ETS Big Data.
 
 ---
 
@@ -49,52 +49,92 @@ Pastikan container berikut berstatus *Up*:
 
 ---
 
-## 🥉 Cara Menjalankan Bronze Layer
+## 🥉 Cara Menjalankan Bronze Layer (Anggota 1)
 
 Pipeline Bronze Layer dapat dieksekusi langsung menggunakan python script. Pastikan terminal berada di root project (`kelompok-1-ets-bigdata/`):
 
 ```bash
-# Pindah ke root folder project jika belum
-cd kelompok-1-ets-bigdata
-
 # Jalankan script Bronze Layer
 python lakehouse/01_bronze.py
 ```
 
 ### 🤖 Fitur Auto-Redirection & Fallback
-Script `01_bronze.py` telah dilengkapi fitur cerdas untuk menangani berbagai kendala Environment lokal:
+Script `01_bronze.py` telah dilengkapi fitur cerdas untuk menangani berbagai kendala environment lokal:
 * **Pengguna Windows Tanpa HADOOP_HOME:** Jika HADOOP_HOME tidak ditemukan, script akan *otomatis mendeteksi* dan mengalihkan (*redirect*) eksekusi PySpark ke dalam container Docker `spark-master`. Anda cukup menjalankan perintah `python lakehouse/01_bronze.py` seperti biasa, sistem akan menanganinya di latar belakang!
-* **Fallback File Lokal:** Jika koneksi HDFS/Hadoop NameNode benar-benar gagal (baik di Windows maupun Docker), script otomatis beralih membaca dari file live lokal (`dashboard/data/live_api.json` dan `live_rss.json`).
-  * *Keterbatasan fallback lokal:* Data yang diambil hanya snapshot saat itu, tidak mencakup file log historis dari Kafka di HDFS.
+* **Fallback File Lokal:** Jika koneksi HDFS/Hadoop NameNode benar-benar gagal, script otomatis beralih membaca dari file live lokal (`dashboard/data/live_api.json` dan `live_rss.json`) dengan skema `file://` agar dibaca dengan sukses oleh Spark dalam container.
+
+---
+
+## 🥈 Cara Menjalankan Silver Layer & Time Travel (Anggota 2)
+
+Setelah data Bronze berhasil terbentuk, Anda dapat mengeksekusi pipeline **Silver Layer** untuk melakukan pembersihan data (*data cleaning*) dan menjalankan demonstrasi **Time Travel** Delta Lake:
+
+```bash
+# Jalankan script Silver Layer
+python lakehouse/02_silver.py
+```
+
+### ⚙️ Transformasi & Pembersihan yang Dilakukan
+* **Silver API (6 Tahap):**
+  1. `dropDuplicates(["id"])` — Mencegah bias/double-count gempa berdasarkan ID unik USGS.
+  2. `filter(magnitude >= 0)` — Membuang magnitudo tidak valid (negatif).
+  3. `filter(depth_km > 0)` — Membuang kedalaman gempa tidak logis ($\le 0$ km).
+  4. `filter(place.isNotNull())` — Membuang data tanpa lokasi.
+  5. `to_timestamp("event_time")` — Mengubah string ISO ke tipe `TimestampType` agar dapat dioperasikan secara temporal.
+  6. `hour(event_time)` $\rightarrow$ kolom `jam_kejadian` & `tanggal_kejadian` — Mengekstrak jam dan tanggal kejadian untuk pola analisis temporal.
+* **Silver RSS (5 Tahap):**
+  1. `dropDuplicates(["id"])` — Menghindari duplikasi berita dari ingestion berulang.
+  2. `filter(title.isNotNull())` — Menyaring artikel kosong tanpa judul.
+  3. `to_timestamp("published_time")` — Menyamakan tipe data ke tipe `TimestampType`.
+  4. `regexp_replace(summary, HTML_PATTERN, "")` $\rightarrow$ kolom `summary_clean` — Membersihkan tag-tag HTML agar teks bersih untuk NLP/analisis sentimen.
+  5. `to_date(published_time)` $\rightarrow$ kolom `tanggal_terbit` — Agregasi tren harian artikel.
+
+### ⏱️ Demonstrasi Time Travel (Wajib)
+Script ini mendemonstrasikan kekuatan pencatatan riwayat transaksi (*transaction log*) Delta Lake:
+1. **Pembaruan (UPDATE):** Mengubah `mag_category` menjadi `"sangat_kuat"` untuk gempa $\ge 5.0$ SR (menghasilkan **Version 1**).
+2. **Perbandingan (Comparison):** Menampilkan distribusi magnitudo di **Version 0** vs **Version 1**.
+3. **Pencarian Waktu (Time Query):** Menggunakan `.option("timestampAsOf", timestamp)` untuk membaca keadaan data pada waktu tertentu di masa lalu.
+4. **Pemulihan (RESTORE):** Mengembalikan tabel kembali ke kondisi awal dengan `restoreToVersion(0)` (menghasilkan versi terbaru di log riwayat).
 
 ---
 
 ## 📊 Output yang Dihasilkan
 
-Setelah script berhasil dijalankan, data akan tersimpan dalam format **Delta Lake (Parquet + Transaction Log)** pada path relatif berikut:
+Setelah kedua script berhasil dijalankan, data akan tersimpan dalam format **Delta Lake (Parquet + Transaction Log)** pada path relatif berikut:
 
 ```text
 kelompok-1-ets-bigdata/
 └── lakehouse/
     └── lakehouse_data/
-        └── bronze/
-            ├── gempa_api/   <-- Menyimpan tabel Delta untuk USGS API
+        ├── bronze/
+        │   ├── gempa_api/   <-- Tabel Delta Bronze API
+        │   │   ├── _delta_log/
+        │   │   └── part-*.parquet
+        │   └── gempa_rss/   <-- Tabel Delta Bronze RSS
+        │       ├── _delta_log/
+        │       └── part-*.parquet
+        └── silver/
+            ├── gempa_api/   <-- Tabel Delta Silver API (Bersih & Versi Terkini)
             │   ├── _delta_log/
             │   └── part-*.parquet
-            └── gempa_rss/   <-- Menyimpan tabel Delta untuk Google News RSS
+            └── gempa_rss/   <-- Tabel Delta Silver RSS (Bersih & Bebas HTML)
                 ├── _delta_log/
                 └── part-*.parquet
 ```
 
 ---
 
-## 🔍 Verifikasi Hasil Ingest
+## 🔍 Verifikasi Hasil Pemrosesan
 
 Untuk memastikan tabel Delta telah terbentuk dengan benar di mesin lokal Anda, Anda bisa mengecek isi direktori output menggunakan command berikut di terminal:
 
 ```bash
-# Cek isi folder output Delta
-ls -la lakehouse/lakehouse_data/bronze/gempa_api/
-ls -la lakehouse/lakehouse_data/bronze/gempa_rss/
+# 1. Cek isi folder output Bronze
+ls lakehouse/lakehouse_data/bronze/gempa_api/
+ls lakehouse/lakehouse_data/bronze/gempa_rss/
+
+# 2. Cek isi folder output Silver
+ls lakehouse/lakehouse_data/silver/gempa_api/
+ls lakehouse/lakehouse_data/silver/gempa_rss/
 ```
-Pastikan folder `_delta_log/` dan file data `.parquet` sudah terbuat di masing-masing direktori.
+Pastikan folder `_delta_log/` (log transaksi) dan file data `.parquet` sudah terbuat di masing-masing direktori.
